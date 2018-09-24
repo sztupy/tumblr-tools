@@ -1,7 +1,16 @@
 import Sequelize from 'sequelize';
 
 export default function(databaseString) {
-  const sequelize = new Sequelize(databaseString);
+  const sequelize = new Sequelize(databaseString, {
+    logging: false,
+    define: {
+      timestamps: false,
+      charset: 'utf8',
+      dialectOptions: {
+        collate: 'utf8_general_ci'
+      }
+    }
+  });
 
   const User = sequelize.define('user', {
     name: {
@@ -15,6 +24,10 @@ export default function(databaseString) {
       type: Sequelize.STRING,
       unique: true
     }
+  }, {
+    indexes: [
+      { fields: [ 'userId' ] },
+    ]
   });
 
   Blog.belongsTo(User);
@@ -40,13 +53,16 @@ export default function(databaseString) {
       { fields: [ 'date' ] },
       { fields: [ 'root' ] },
       { fields: [ 'state' ] },
+      { fields: [ 'blogId' ]},
+      { fields: [ 'fromBlogId' ]},
+      { fields: [ 'rootBlogId' ]}
     ]
   });
 
   Post.belongsTo(Blog);
   Blog.hasMany(Post);
-  Post.belongsTo(Blog, { as: 'fromBlog', constraints: false } )
-  Post.belongsTo(Blog, { as: 'rootBlog', constraints: false } )
+  Post.belongsTo(Blog, { as: 'fromBlog' } );
+  Post.belongsTo(Blog, { as: 'rootBlog' } );
 
   const Content = sequelize.define('content', {
     tumblrId: { type: Sequelize.INTEGER, unique: 'tumblrContentVersion' },
@@ -54,7 +70,8 @@ export default function(databaseString) {
     text: { type: Sequelize.TEXT },
   },{
     indexes: [
-      { fields: [ 'tumblrId' ] }
+      { fields: [ 'tumblrId' ] },
+      { fields: [ 'blogId' ] }
     ]
   });
 
@@ -93,7 +110,7 @@ export default function(databaseString) {
     name: { type: Sequelize.STRING(65535) }
   },{
     indexes: [
-      { fields: [ 'name' ] },
+      { fields: [ 'name' ] }
     ]
   });
 

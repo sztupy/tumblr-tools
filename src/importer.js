@@ -1,6 +1,7 @@
 import fs from 'fs';
 import lodash from 'lodash';
 import cheerio from 'cheerio';
+import AdmZip from 'adm-zip';
 import { promisify } from 'util';
 
 const readFileAsync = promisify(fs.readFile);
@@ -11,26 +12,28 @@ export default class Importer {
   }
 
   async run() {
-    let currentPage = 0;
-    let perPage = 50;
-    let blog = { posts: { length: perPage }};
+    const zip = new AdmZip("./magyar-tumbli.zip");
+    const zipEntries = zip.getEntries();
 
-    while (blog.posts.length >= perPage ) {
-      blog = JSON.parse(await readFileAsync(`dump/dump-${currentPage}.json`));
-      currentPage += 1;
+    for (const entry of zipEntries) {
+      console.log(entry.entryName);
 
-      const transaction = await this.database.sequelize.transaction();
+      blog = JSON.parse(entry.getData());
 
-      const userName = blog.blog.name;
-      const databaseBlog = await this.getBlog(transaction, userName);
+      if (blog.blog && blog.blog.name) {
+        const transaction = await this.database.sequelize.transaction();
 
-      console.log(`Page: ${currentPage} - Posts: ${blog.posts.length}`);
+        const userName = blog.blog.name;
+        const databaseBlog = await this.getBlog(transaction, userName);
 
-      for (const post of blog.posts) {
-        await this.importPost(transaction, post, userName, databaseBlog);
-      };
+        for (const post of blog.posts) {
+          await this.importPost(transaction, post, userName, databaseBlog);
+        };
 
-      await transaction.commit();
+        await transaction.commit();
+      } else {
+        console.log("Invalid file");
+      }
     }
   }
 
@@ -173,10 +176,10 @@ export default class Importer {
       title: title,
       date: new Date(post.timestamp*1000),
       slug: slug,
-      blog: databaseBlog,
+      blog: databaseBlog.id,
       state: 'original',
-      fromBlog: fromBlog,
-      rootBlog: rootBlog,
+      fromBlogId: fromBlog ? fromBlog.id : null,
+      rootBlogId: rootBlog ? rootBlog.id : null,
       root: this.determinePostRootType(post, userName)
     }
 
@@ -204,7 +207,7 @@ export default class Importer {
     for (let i = 0; i < tags.length; i++) {
       const [databaseTag, ] = await this.database.Tag.findOrCreate({
         where: { name: tags[i] },
-        default: { name: tags[i] },
+        defaults: { name: tags[i] },
         transaction: transaction
       });
       await databaseTag.addPost(databasePost, { transaction: transaction });
@@ -234,7 +237,7 @@ export default class Importer {
       for (let position = 0; position < post.trail.length; position++) {
         const content = post.trail[position];
         const last = (position == post.trail.length - 1) && content.blog.name == userName;
-        const oldContents = await this.database.Content.findAll({where: { tumblrId: content.id }, transaction: transaction });
+        const oldContents = await this.database.Content.findAll({where: { tumblrId: content.post.id }, include: [this.database.Blog], transaction: transaction });
 
         let databaseContent = null;
         for (let contentIdx = 0; contentIdx < oldContents.length; contentIdx++) {
@@ -244,13 +247,13 @@ export default class Importer {
         }
 
         if (!databaseContent) {
-          const databaseBlog = await this.getBlog(transaction, content.blog.name);
+          const databaseBlog = await this.getBlog(transaction, content.blog.name || userName);
 
           const data = {
-            tumblrId: content.id,
+            tumblrId: content.post.id,
             version: oldContents.length + 1,
             text: content['content_raw'],
-            blog: databaseBlog
+            blogId: databaseBlog.id
           }
 
           databaseContent = await this.database.Content.create(data, { transaction: transaction });
@@ -287,8 +290,8 @@ export default class Importer {
   }
 
   async getBlog(transaction, userName) {
-    const [databaseUser, ] = await this.database.User.findOrCreate({where: {name: userName}, transaction: transaction });
-    const [databaseBlog, ] = await this.database.Blog.findOrCreate({where: {name: userName}, default: { user: databaseUser }, transaction: transaction});
+    const [databaseUser, ] = await this.database.User.findOrCreate({where: { name: userName }, defaults: { name: userName }, transaction: transaction });
+    const [databaseBlog, ] = await this.database.Blog.findOrCreate({where: { name: userName }, defaults: { name: userName, userId: databaseUser.id }, transaction: transaction});
     return databaseBlog;
   }
 

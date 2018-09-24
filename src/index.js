@@ -54,7 +54,10 @@ app.on('activate', () => {
 });
 
 process.on('unhandledRejection', (reason, p) => {
-  console.error('Unhandled Rejection at: Promise', p, 'reason:', reason);
+  console.error('Unhandled Rejection at: Promise', p);
+  console.error('Reason: ', reason);
+  app.quit();
+  process.kill(1);
 });
 
 // In this file you can include the rest of your app's specific main process
