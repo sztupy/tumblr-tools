@@ -47,12 +47,13 @@
     }
   },
   "dependencies": {
-    "adm-zip": "^0.4.11",
     "cheerio": "^1.0.0-rc.2",
     "electron-compile": "^6.4.3",
     "electron-squirrel-startup": "^1.0.0",
     "kramed": "^0.5.6",
     "lodash": "^4.17.11",
+    "node-stream-zip": "^1.7.0",
+    "pg": "^7.4.3",
     "sequelize": "^4.38.1",
     "showdown": "^1.8.6",
     "sqlite3": "^4.0.2",

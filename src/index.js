@@ -57,7 +57,6 @@ process.on('unhandledRejection', (reason, p) => {
   console.error('Unhandled Rejection at: Promise', p);
   console.error('Reason: ', reason);
   app.quit();
-  process.kill(1);
 });
 
 // In this file you can include the rest of your app's specific main process
@@ -67,7 +66,8 @@ import Importer from './importer.js';
 import MarkdownExporter from './markdown_exporter.js';
 
 async function run() {
-  const db = Database('sqlite:db.sqlite');
+  //const db = Database('sqlite:db.sqlite');
+  const db = Database('postgres://localhost:5432/tumblr');
   await db.sequelize.sync();
 
   let importer = new Importer(db);

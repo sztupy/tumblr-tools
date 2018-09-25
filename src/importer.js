@@ -1,40 +1,54 @@
 import fs from 'fs';
 import lodash from 'lodash';
 import cheerio from 'cheerio';
-import AdmZip from 'adm-zip';
+import Zip from 'node-stream-zip';
 import { promisify } from 'util';
+import Sequelize from 'sequelize';
+import crypto from 'crypto';
 
 const readFileAsync = promisify(fs.readFile);
 
 export default class Importer {
   constructor(database) {
     this.database = database;
+    this.cachedBlogs = {};
+    this.cachedTags = {};
+    this.start = false;
   }
 
-  async run() {
-    const zip = new AdmZip("./magyar-tumbli.zip");
-    const zipEntries = zip.getEntries();
+  run() {
+    const zip = new Zip({file: "./magyar-tumbli.zip"});
 
-    for (const entry of zipEntries) {
-      console.log(entry.entryName);
+    zip.on('ready', async () => {
+      for (const entry of Object.values(zip.entries())) {
+        //if (entry.name == 'dump/abszurdisztan/dump-16750.json') {
+          this.start = true;
+       // }
+        if (this.start && entry.isFile) {
+          console.log(`Starting ${entry.name}`);
+          const startTime = Date.now();
+          const blog = JSON.parse(zip.entryDataSync(entry));
 
-      blog = JSON.parse(entry.getData());
+          if (blog.blog && blog.blog.name) {
+            const transaction = await this.database.sequelize.transaction();
 
-      if (blog.blog && blog.blog.name) {
-        const transaction = await this.database.sequelize.transaction();
+            const userName = blog.blog.name;
+            const databaseBlog = await this.getBlog(transaction, userName);
 
-        const userName = blog.blog.name;
-        const databaseBlog = await this.getBlog(transaction, userName);
+            for (const post of blog.posts) {
+              await this.importPost(transaction, post, userName, databaseBlog);
+            };
 
-        for (const post of blog.posts) {
-          await this.importPost(transaction, post, userName, databaseBlog);
-        };
-
-        await transaction.commit();
-      } else {
-        console.log("Invalid file");
+            await transaction.commit();
+          } else {
+            console.log(`Invalid file ${entry.name}`);
+          }
+          const endTime = Date.now();
+          console.log(`Done with ${entry.name} in ${endTime - startTime}ms`);
+        }
       }
-    }
+      zip.close();
+    });
   }
 
   async importPost(transaction, post, userName, databaseBlog) {
@@ -169,51 +183,59 @@ export default class Importer {
     let tags = post.tags || [];
 
     const data = {
-      tumblrId: post.id,
+      tumblr_id: post.id,
       url: post.post_url,
       type: post.type,
       meta: removeEmpty(meta),
       title: title,
       date: new Date(post.timestamp*1000),
       slug: slug,
-      blog: databaseBlog.id,
+      blog_id: databaseBlog.id,
       state: 'original',
-      fromBlogId: fromBlog ? fromBlog.id : null,
-      rootBlogId: rootBlog ? rootBlog.id : null,
+      from_blog_id: fromBlog ? fromBlog.id : null,
+      root_blog_id: rootBlog ? rootBlog.id : null,
       root: this.determinePostRootType(post, userName)
     }
 
-    const [databasePost, created] = await this.database.Post.findOrCreate({
-      where: { tumblrId: post.id },
+    const [databasePost, created] = await this.database.Post.findCreateFind({
+      where: { tumblr_id: post.id },
       defaults: data,
       transaction: transaction
     });
 
     if (!created) {
-      console.log(`Post already exist, updating: ${post.id}`);
-      await databasePost.update(data, { transaction: transaction });
+      console.log(`Post already exist: ${post.id}`);
+    } else {
+      await this.importPhotos(transaction, post, databasePost, probableRootName);
+
+      if (post.type == 'video' && meta.post.url && meta.post.type == 'tumblr') {
+        await this.saveResource(transaction, 'video', meta.post.url, meta.post, databasePost, probableRootName);
+      }
+
+      if (post.type == 'audio' && meta.post.url && meta.post.type == 'tumblr') {
+        await this.saveResource(transaction, 'audio', meta.post.url, meta.post, databasePost, probableRootName);
+      }
+
+      for (let i = 0; i < tags.length; i++) {
+        let databaseTag = this.cachedTags[tags[i]];
+        if (!databaseTag) {
+          [databaseTag, ] = await this.database.Tag.findCreateFind({
+            where: { name: tags[i] },
+            defaults: { name: tags[i] },
+            transaction: transaction
+          });
+          this.cachedTags[tags[i]] = databaseTag;
+        }
+        await this.database.sequelize.query("INSERT INTO post_tags (post_id,tag_id) VALUES (?,?) ON CONFLICT DO NOTHING;", {
+          replacements: [ databasePost.id, databaseTag.id ],
+          type: Sequelize.QueryTypes.RAW,
+          transaction: transaction
+        });
+        //await databasePost.addTag(databaseTag, { transaction: transaction });
+      }
+
+      await this.importContent(transaction, post, databasePost);
     }
-
-    await this.importPhotos(transaction, post, databasePost, probableRootName);
-
-    if (post.type == 'video' && meta.post.url && meta.post.type == 'tumblr') {
-      await this.saveResource(transaction, 'video', meta.post.url, meta.post, databasePost, probableRootName);
-    }
-
-    if (post.type == 'audio' && meta.post.url && meta.post.type == 'tumblr') {
-      await this.saveResource(transaction, 'audio', meta.post.url, meta.post, databasePost, probableRootName);
-    }
-
-    for (let i = 0; i < tags.length; i++) {
-      const [databaseTag, ] = await this.database.Tag.findOrCreate({
-        where: { name: tags[i] },
-        defaults: { name: tags[i] },
-        transaction: transaction
-      });
-      await databaseTag.addPost(databasePost, { transaction: transaction });
-    }
-
-    await this.importContent(transaction, post, databasePost);
   }
 
   async importPhotos(transaction, post, databasePost, rootName) {
@@ -237,7 +259,7 @@ export default class Importer {
       for (let position = 0; position < post.trail.length; position++) {
         const content = post.trail[position];
         const last = (position == post.trail.length - 1) && content.blog.name == userName;
-        const oldContents = await this.database.Content.findAll({where: { tumblrId: content.post.id }, include: [this.database.Blog], transaction: transaction });
+        const oldContents = await this.database.Content.findAll({where: { tumblr_id: content.post.id }, include: [this.database.Blog], transaction: transaction });
 
         let databaseContent = null;
         for (let contentIdx = 0; contentIdx < oldContents.length; contentIdx++) {
@@ -250,10 +272,10 @@ export default class Importer {
           const databaseBlog = await this.getBlog(transaction, content.blog.name || userName);
 
           const data = {
-            tumblrId: content.post.id,
+            tumblr_id: content.post.id,
             version: oldContents.length + 1,
             text: content['content_raw'],
-            blogId: databaseBlog.id
+            blog_id: databaseBlog.id
           }
 
           databaseContent = await this.database.Content.create(data, { transaction: transaction });
@@ -269,29 +291,59 @@ export default class Importer {
           }
         }
 
-        await databasePost.addContent(databaseContent, { through: { position: position, isLast: last }, transaction: transaction });
+        await this.database.sequelize.query("INSERT INTO post_contents (post_id,content_id,position,is_last) VALUES (?,?,?,?) ON CONFLICT DO NOTHING;",{
+          replacements: [ databasePost.id, databaseContent.id, position, last ],
+          type: Sequelize.QueryTypes.RAW,
+          transaction: transaction
+        });
+        //await databasePost.addContent(databaseContent, { through: { position: position, isLast: last }, transaction: transaction });
       }
     }
   }
 
   async saveResource(transaction, type, url, metadata, resourceOwner) {
+    if (!url) {
+      return;
+    }
+    if (url.length>=255) {
+      metadata['full_url'] = url;
+      url = crypto.createHash('sha256').update(url).digest('base64');
+    }
     let resource = await this.database.Resource.findOne({ where:{ url: url }, transaction: transaction });
     if (!resource) {
       resource = await this.database.Resource.create({
         type: type,
         url: url,
-        localUrl: null,
+        local_url: null,
         external: url.indexOf('tumblr.com') == -1,
         meta: metadata
       }, { transaction: transaction });
     }
-    await resourceOwner.addResource(resource, { transaction: transaction });
+    if (resourceOwner.constructor.tableName == 'posts') {
+      await this.database.sequelize.query("INSERT INTO post_resources (post_id,resource_id) VALUES (?,?) ON CONFLICT DO NOTHING;", {
+        replacements: [ resourceOwner.id, resource.id ],
+        type: Sequelize.QueryTypes.RAW,
+        transaction: transaction
+      });
+    } else {
+      await this.database.sequelize.query("INSERT INTO content_resources (content_id,resource_id) VALUES (?,?) ON CONFLICT DO NOTHING;", {
+        replacements: [ resourceOwner.id, resource.id ],
+        type: Sequelize.QueryTypes.RAW,
+        transaction: transaction
+      });
+    }
+    //await resourceOwner.addResource(resource, { transaction: transaction });
     return resource;
   }
 
   async getBlog(transaction, userName) {
-    const [databaseUser, ] = await this.database.User.findOrCreate({where: { name: userName }, defaults: { name: userName }, transaction: transaction });
-    const [databaseBlog, ] = await this.database.Blog.findOrCreate({where: { name: userName }, defaults: { name: userName, userId: databaseUser.id }, transaction: transaction});
+    let databaseBlog = this.cachedBlogs[userName];
+
+    if (!databaseBlog) {
+      [databaseBlog, ] = await this.database.Blog.findCreateFind({where: { name: userName }, defaults: { name: userName }, transaction: transaction});
+      this.cachedBlogs[userName] = databaseBlog;
+    }
+
     return databaseBlog;
   }
 

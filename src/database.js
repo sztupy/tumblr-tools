@@ -2,8 +2,9 @@ import Sequelize from 'sequelize';
 
 export default function(databaseString) {
   const sequelize = new Sequelize(databaseString, {
-    logging: false,
+    logging: true,
     define: {
+      underscored: true,
       timestamps: false,
       charset: 'utf8',
       dialectOptions: {
@@ -12,30 +13,16 @@ export default function(databaseString) {
     }
   });
 
-  const User = sequelize.define('user', {
-    name: {
-      type: Sequelize.STRING,
-      unique: true
-    }
-  });
-
   const Blog = sequelize.define('blog', {
     name: {
       type: Sequelize.STRING,
       unique: true
     }
-  }, {
-    indexes: [
-      { fields: [ 'userId' ] },
-    ]
   });
 
-  Blog.belongsTo(User);
-  User.hasMany(Blog);
-
   const Post = sequelize.define('post', {
-    tumblrId: {
-      type: Sequelize.INTEGER,
+    tumblr_id: {
+      type: Sequelize.BIGINT,
       unique: true
     },
     title: { type: Sequelize.STRING(65535) },
@@ -48,39 +35,44 @@ export default function(databaseString) {
     state: { type: Sequelize.ENUM, values: ['original','reconstructed'] }
   },{
     indexes: [
-      { fields: [ 'tumblrId' ] },
+      { fields: [ 'tumblr_id' ] },
       { fields: [ 'type' ] },
       { fields: [ 'date' ] },
       { fields: [ 'root' ] },
       { fields: [ 'state' ] },
-      { fields: [ 'blogId' ]},
-      { fields: [ 'fromBlogId' ]},
-      { fields: [ 'rootBlogId' ]}
+      { fields: [ 'blog_id' ]},
+      { fields: [ 'from_blog_id' ]},
+      { fields: [ 'root_blog_id' ]}
     ]
   });
 
   Post.belongsTo(Blog);
   Blog.hasMany(Post);
-  Post.belongsTo(Blog, { as: 'fromBlog' } );
-  Post.belongsTo(Blog, { as: 'rootBlog' } );
+  Post.belongsTo(Blog, { as: 'from_blog' } );
+  Post.belongsTo(Blog, { as: 'root_blog' } );
 
   const Content = sequelize.define('content', {
-    tumblrId: { type: Sequelize.INTEGER, unique: 'tumblrContentVersion' },
-    version: { type: Sequelize.INTEGER, unique: 'tumblrContentVersion' },
+    tumblr_id: { type: Sequelize.BIGINT, unique: 'tumblr_content_version' },
+    version: { type: Sequelize.BIGINT, unique: 'tumblr_content_version' },
     text: { type: Sequelize.TEXT },
   },{
     indexes: [
-      { fields: [ 'tumblrId' ] },
-      { fields: [ 'blogId' ] }
+      { fields: [ 'tumblr_id' ] },
+      { fields: [ 'blog_id' ] }
     ]
   });
 
   Content.belongsTo(Blog);
   Blog.hasMany(Content);
 
-  const PostContents = sequelize.define('postContents', {
+  const PostContents = sequelize.define('post_contents', {
     position: { type: Sequelize.INTEGER },
-    isLast: { type: Sequelize.BOOLEAN }
+    is_last: { type: Sequelize.BOOLEAN },
+  },{
+    indexes: [
+      { fields: [ 'position' ] },
+      { fields: [ 'is_last' ] }
+    ]
   });
 
   Post.belongsToMany(Content, { through: PostContents });
@@ -88,23 +80,23 @@ export default function(databaseString) {
 
   const Resource = sequelize.define('resource', {
     type: { type: Sequelize.STRING },
-    url: { type: Sequelize.STRING(65535) },
-    localUrl: { type: Sequelize.STRING(65535) },
+    url: { type: Sequelize.STRING },
+    local_url: { type: Sequelize.STRING },
     external: { type: Sequelize.BOOLEAN },
     meta: { type: Sequelize.JSON }
   },{
     indexes: [
       { fields: [ 'url' ], unique: true },
-      { fields: [ 'localUrl' ] },
+      { fields: [ 'local_url' ] },
       { fields: [ 'type' ] },
       { fields: [ 'external' ] }
     ]
   });
 
-  Post.belongsToMany(Resource, { through: 'PostResources' });
-  Resource.belongsToMany(Post, { through: 'PostResources' });
-  Content.belongsToMany(Resource, { through: 'ContentResources' });
-  Resource.belongsToMany(Content, { through: 'ContentResources' });
+  Post.belongsToMany(Resource, { through: 'post_resources' });
+  Resource.belongsToMany(Post, { through: 'post_resources' });
+  Content.belongsToMany(Resource, { through: 'content_resources' });
+  Resource.belongsToMany(Content, { through: 'content_resources' });
 
   const Tag = sequelize.define('tag', {
     name: { type: Sequelize.STRING(65535) }
@@ -114,12 +106,11 @@ export default function(databaseString) {
     ]
   });
 
-  Post.belongsToMany(Tag, { through: 'PostTags' });
-  Tag.belongsToMany(Post, { through: 'PostTags' });
+  Post.belongsToMany(Tag, { through: 'post_tags' });
+  Tag.belongsToMany(Post, { through: 'post_tags' });
 
   return {
     sequelize: sequelize,
-    User: User,
     Blog: Blog,
     Post: Post,
     Content: Content,
