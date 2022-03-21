@@ -11,6 +11,7 @@
     "publish": "electron-forge publish",
     "lint": "eslint src --color"
   },
+  "type": "module",
   "keywords": [],
   "author": "zsolt",
   "license": "MIT",
@@ -53,10 +54,10 @@
     "kramed": "^0.5.6",
     "lodash": "^4.17.11",
     "node-stream-zip": "^1.7.0",
-    "pg": "^7.4.3",
-    "sequelize": "^4.38.1",
+    "pg": "^8.7.3",
+    "sequelize": "^6.17.0",
     "showdown": "^1.8.6",
-    "sqlite3": "^4.0.2",
+    "sqlite3": "^5.0.2",
     "tumblr.js": "^2.0.0"
   },
   "devDependencies": {
