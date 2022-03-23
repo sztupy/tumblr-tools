@@ -42,10 +42,11 @@ export default class Importer {
     this.stats = {};
     this.start = false;
     this.currentImport = null;
+    this.lastImport = null;
   }
 
   run() {
-    const fileName = "d:/magyar-tumbli-2018.zip";
+    const fileName = "d:/magyar-tumbli-2022-03-12.zip";
     const { birthtime } = fs.statSync(fileName);
     const zip = new Zip({file: fileName});
 
@@ -63,12 +64,14 @@ export default class Importer {
         defaults: importData
       });
 
+      this.lastImport = await this.database.Import.findByPk(this.currentImport.id - 1);
+
       let counter = 0;
 
       for (const entry of Object.values(zip.entries())) {
-        //if (entry.name.indexOf('dump/viiviiennna/dump-5600.json') != -1) {
+        if (entry.name.indexOf('dump/21stcenturydigitalboy/dump-1500.json') != -1) {
           this.start = true;
-        //}
+        }
         if (this.start && entry.isFile) {
           const startTime = Date.now();
           console.log(`Starting ${entry.name}`);
@@ -129,7 +132,13 @@ export default class Importer {
   async importPost(transaction, post, userName, databaseBlogName) {
     let databasePost = await this.database.Post.findOne({ where: { tumblr_id: post.id }, transaction: transaction });
 
-    if (!databasePost) {
+    // only handle the post if either we haven't saved it, or we saved it in an eariler import and hence we might have to revisit its details
+    if (!databasePost || (
+          this.lastImport &&
+          databasePost.id <= this.lastImport.postId &&
+          (!databasePost.meta['archive'] || !databasePost.meta['archive'][this.lastImport.id])
+        )
+      ) {
       let meta = {};
 
       meta['source'] = {
@@ -171,6 +180,7 @@ export default class Importer {
         rootBlogName = await this.getBlogName(transaction, probableRootName);
       }
 
+      // extract useful metadata based on the type of the post
       switch(post.type) {
         case 'text': break;
         case 'link':
@@ -233,16 +243,21 @@ export default class Importer {
 
       let contentData = null;
 
+      // title is usually short, but in legacy posts made before the trail system was added all content are put in the title. If it's too large hence we will cut it and save it as a separate content
       if (title.length > 132) {
         body = title + "\n" + body;
         title = title.substring(0,132) + "...";
       }
 
+      // if there's a larger body assigned to this post we will save it as belonging to the root's postID. That is because these contents are usually shared between all reblogs of the root, and usually they don't actually change
+      // however this is not always the case, especially for legacy posts you could fully edit the root content and later reblogs will see that, instead of the root. That's why we can't really determine who was the posts owner a lot of the times.
+      // Do note sometimes even obvious cases can be tricky because a lot of legacy posts have a very broken system
       if (body && body != "") {
+        body = this.sanitizeImageUrls(body);
         contentData = [
           rootId || post.id,
-          crypto.createHash('sha256').update(body,'utf-8').digest('hex'),
-          body,
+          crypto.createHash('sha256').update(this.sanitizeImageUrls(body).replaceAll("\n",""),'utf-8').digest('hex'),
+          this.sanitizeImageUrls(body),
           null
         ];
       }
@@ -253,7 +268,7 @@ export default class Importer {
         tumblr_id: post.id,
         url: post.post_url,
         type: post.type,
-        meta: clearEmpties(meta),
+        meta: this.sanitizeImageUrls(clearEmpties(meta)),
         title: title || "",
         date: new Date(post.timestamp*1000),
         blogNameId: databaseBlogName.id,
@@ -264,17 +279,290 @@ export default class Importer {
         root: this.determinePostRootType(post, userName)
       }
 
-      this.stats['new_posts'] += 1;
-      databasePost = await this.database.Post.create(data, { transaction: transaction });
+      if (!databasePost) {
+        this.stats['new_posts'] += 1;
+        databasePost = await this.database.Post.create(data, { transaction: transaction });
+      } else {
+        // this means that we have already saved this post in a previous import. We need to go through the data and see if anything has changed.
+        // dependent on what has changed we have to a couple of stuff differently
+        let newArchive = {};
+        let postChanged = false;
+
+        // 1. check if any of the blog names have changed. This can happen is a blog gets renamed so we can use this detail to link blogs together
+        // note we do not update these on the post, we keep the original details, unless we obtained new data that was not there yet. This can happen with some legacy posts
+        
+        if (data.blogNameId != databasePost.blogNameId) {
+          await this.mergeBlogs(transaction, data.blogNameId, databasePost.blogNameId, 'rename', { post_id: databasePost.id });
+        }
+
+        if (data.fromBlogNameId != databasePost.fromBlogNameId) {
+          await this.mergeBlogs(transaction, data.fromBlogNameId, databasePost.fromBlogNameId, 'rename', { post_id: databasePost.id });
+        }
+
+        if (data.rootBlogNameId != databasePost.rootBlogNameId) {
+          await this.mergeBlogs(transaction, data.rootBlogNameId, databasePost.rootBlogNameId, 'rename', { post_id: databasePost.id });
+        }
+
+        // these should not happen but can occasionally so if we managed to obtain some new information we'll add them
+        if (data.fromBlogNameId && !databasePost.fromBlogNameId) {
+          databasePost.fromBlogNameId = data.fromBlogNameId;
+          postChanged = true;
+          newArchive['from_blog'] = 'empty';
+          console.log("FROM BLOG ID added " + databasePost.id);
+        }
+        
+        if (data.rootBlogNameId && !databasePost.rootBlogNameId) {
+          databasePost.rootBlogNameId = data.rootBlogNameId;
+          postChanged = true;
+          newArchive['root_blog'] = 'empty';
+          console.log("ROOT BLOG ID added " + databasePost.id);
+        }
+
+        if (data.root_tumblr_id && !databasePost.root_tumblr_id) {
+          databasePost.root_tumblr_id = data.root_tumblr_id;
+          postChanged = true;
+          newArchive['root_id'] = 'empty';
+          console.log("ROOT TUMBLR ID added " + databasePost.id);
+        }
+        
+        if (data.from_tumblr_id && !databasePost.from_tumblr_id) {
+          databasePost.from_tumblr_id = data.from_tumblr_id;
+          postChanged = true;
+          newArchive['from_id'] = 'empty';
+          console.log("FROM TUMBLR ID added " + databasePost.id);
+        }
+
+        if (data.root != databasePost.root) {
+          console.log("WARNING: ROOT INFO CHANGED " + databasePost.id);
+          if (databasePost.root) {
+            // if we obtained this is not a root post anymore we demote it. We will not promote a non-root post to root however
+            databasePost.root = data.root;
+            postChanged = true;
+          }
+        }
+
+        if (data.root_tumblr_id && data.root_tumblr_id != databasePost.root_tumblr_id) {
+          console.log("WARNING: ROOT IDs DONT MATCH " + databasePost.id + " " + data.root_tumblr_id);
+        }
+
+        if (data.from_tumblr_id && data.from_tumblr_id != databasePost.from_tumblr_id) {
+          console.log("WARNING: ROOT IDs DONT MATCH " + databasePost.id+ " " + data.from_tumblr_id);
+        }
+
+        // 2. check if the tags have been changed. If yes we will clear the old tag list, save it as a metadata for archival and then let the system re-create the tags later
+        let [response, ] = await this.database.sequelize.query("SELECT position,tag_id,name FROM post_tags JOIN tags ON tag_id = id WHERE post_id = ? ORDER BY position ASC;",
+        {
+          replacements: [ databasePost.id ],
+          type: Sequelize.QueryTypes.RAW,
+          transaction: transaction
+        });
+
+        let changed = false;
+        tags ||= [];
+        if (response.length != tags.length) {
+          changed = true;
+        } else {
+          for (let i = 0; i < response.length; i++) {
+            if (response[i]['name'] != tags[i]) {
+              changed = true;
+              break;
+            }
+          }
+        }
+
+        if (changed) {
+          let oldTags = [];
+          for (let i = 0; i < response.length; i++) {
+            oldTags.push(response[i]['tag_id']);
+          }
+
+          newArchive['tags'] = oldTags;
+
+          await this.database.sequelize.query("DELETE FROM post_tags WHERE post_id = ?", {
+            replacements: [ databasePost.id ],
+            type: Sequelize.QueryTypes.RAW,
+            transaction: transaction
+          });
+
+          console.log("Tags changed on old post " + databasePost.id);
+        }
+
+        // 3. check if the root content has been changed. If yes we will save the old id as an archive and update the link to point to the new one
+        // 4. check if the trail has changed. If yes we will clear the old trail (saving it in the metadata), and let the system re-create it later
+        // 5. check if the title has been changed. If yes we will archive the old one and update to the new one
+
+        [response, ] = await this.database.sequelize.query("SELECT position,content_id,version FROM post_contents JOIN contents ON content_id = id WHERE post_id = ? ORDER BY position ASC;",
+        {
+          replacements: [ databasePost.id ],
+          type: Sequelize.QueryTypes.RAW,
+          transaction: transaction
+        });
+
+        // check if the root content matches our new root content information
+        if (response[0] && response[0]['position'] == -1) {
+          if (contentData) {
+            if (response[0]['version'] != contentData[1]) {
+              // there was content in the past but it's different now
+              newArchive['root'] = response[0]['content_id'];
+
+              await this.database.sequelize.query("DELETE FROM post_contents WHERE position = -1 AND post_id = ?", {
+                replacements: [ databasePost.id ],
+                type: Sequelize.QueryTypes.RAW,
+                transaction: transaction    
+              });
+
+              console.log("Root content changed on old post " + databasePost.id);
+            } else {
+              // all good nothing to do
+            }
+          } else {
+            // there was content in the past but there isn't one now
+            newArchive['root'] = response[0]['content_id'];
+
+            await this.database.sequelize.query("DELETE FROM post_contents WHERE position = -1 AND post_id = ?", {
+              replacements: [ databasePost.id ],
+              type: Sequelize.QueryTypes.RAW,
+              transaction: transaction    
+            });
+
+            console.log("Root content removed on old post " + databasePost.id);
+          }
+          response.shift();
+        } else {
+          if (contentData) {
+            // there was no content in the past but there is one now
+            newArchive['root'] = -1;
+          } else {
+            // all good nothing to do
+          }
+        }
+        
+        // check if the trail has changes
+        changed = false;
+        post.trail ||= [];
+        if (response.length != post.trail.length) {
+          changed = true;
+        } else {
+          for (let i = 0; i < response.length; i++) {
+            let contentBody = this.sanitizeImageUrls(post.trail[i]['content_raw']).replaceAll("\n","");
+            let contentHash = crypto.createHash('sha256').update(contentBody,'utf-8').digest('hex');
+            if (response[i]['version'] != contentHash) {
+              changed = true;
+              break;
+            }
+          }
+        }
+
+        if (changed) {
+          let oldTrail = [];
+          for (let i = 0; i < response.length; i++) {
+            oldTrail.push(response[i]['content_id']);
+          }
+
+          newArchive['trail'] = oldTrail;
+
+          await this.database.sequelize.query("DELETE FROM post_contents WHERE post_id = ? AND position >= 0", {
+            replacements: [ databasePost.id ],
+            type: Sequelize.QueryTypes.RAW,
+            transaction: transaction
+          });
+
+          console.log("Trail changed on old post " + databasePost.id);
+        }
+
+        // check for title changes
+        if (data.title != databasePost.title) {
+          newArchive['title'] = databasePost.title;
+          databasePost.title = data.title;
+          console.log("Title changed on old post " + databasePost.id);
+          postChanged = true;
+        }
+
+        // 6. check if the metadata has been changed. If yes we save the old one to the archive and update to the new one
+
+        if (!lodash.isEqual(this.normalizeMetadata(data.meta['post']), this.normalizeMetadata(databasePost.meta['post']))) {
+          newArchive['meta'] = databasePost.meta['post'] || 'empty';
+          databasePost.meta['post'] = data.meta['post'];
+          console.log("Metadata changed on old " + post.type + " post " + databasePost.id);
+          postChanged = true;
+        }
+
+        // 7. check linked resources
+
+        [response, ] = await this.database.sequelize.query("SELECT position,resource_id,url FROM post_resources JOIN resources ON resource_id = id WHERE post_id = ? ORDER BY position ASC;",
+        {
+          replacements: [ databasePost.id ],
+          type: Sequelize.QueryTypes.RAW,
+          transaction: transaction
+        });
+
+        changed = false;
+        post.photos ||= [];
+        if (response.length != post.photos.length) {
+          changed = true;
+        } else {
+          for (let i = 0; i < response.length; i++) {
+            if (response[i]['url'] != this.sanitizeImageUrls(this.getPhotoUrl(post.photos[i]))) {
+              changed = true;
+              break;
+            }
+          }
+        }
+
+        if (changed) {
+          let oldResources = [];
+          for (let i = 0; i < response.length; i++) {
+            oldResources.push(response[i]['resource_id']);
+          }
+
+          newArchive['resources'] = oldResources;
+
+          await this.database.sequelize.query("DELETE FROM post_resources WHERE post_id = ?", {
+            replacements: [ databasePost.id ],
+            type: Sequelize.QueryTypes.RAW,
+            transaction: transaction
+          });
+
+          console.log("Resources changed on old post " + databasePost.id);
+        }
+
+        // 8. we expect the remaining data to not change, but let's log if it does nevertheless
+        if (data.type != databasePost.type) {
+          console.log("WARNING: TYPE CHANGED " + databasePost.id);
+        }
+        if (data.date.getTime() != databasePost.date.getTime()) {
+          console.log("WARNING: DATE CHANGED " + databasePost.id);
+        }
+
+        // 9. save the new post if we changed anything
+        newArchive = clearEmpties(newArchive);
+
+        if (!lodash.isEmpty(newArchive)) {
+          databasePost.meta['archive'] ||= {};
+          databasePost.meta['archive'][this.lastImport.id] = newArchive;
+
+          databasePost.meta = this.sanitizeImageUrls(clearEmpties(databasePost.meta));
+          databasePost.changed('meta',true);
+          postChanged = true;
+        }
+
+        if (postChanged) {
+          await databasePost.save({ transaction: transaction });
+        }
+      }
         
       if (post.post_author) {
+        // you can enable showing the post's real author on sub-blogs. If this is eanbled we can actually see who is controlling a sub-blog
         await this.mergeBlogs(transaction, post.post_author, userName, 'author', { post_id: databasePost.id });
       }
 
       if (contentData) {
+        // this is where we save larger text fields related to the post. These posts will have a position of -1 and will never be tied directly to a blog, even
+        // if the real owner could be determined. We can potentially back-fill this data later though if we know the full database
         await this.importContentData(transaction, contentData, databasePost, -1, false);
       }
 
+      // do note tags have an ordering as well
       for (let i = 0; i < tags.length; i++) {
         let databaseTag = this.cachedTags[tags[i]];
         if (!databaseTag) {
@@ -290,11 +578,13 @@ export default class Importer {
           type: Sequelize.QueryTypes.RAW,
           transaction: transaction
         });
-      }
+      } 
     }
 
+    // this is where we save the photos linked to a post. This usually happens for photo type posts, but it can also happen for link ones as well
     await this.importPhotos(transaction, post, databasePost);
 
+    // this is where we look at the reblog trail and save all trail elements separately. We can use these separate elements to reconstruct dead/deactivated or non-imported blogs to an extent
     await this.importContent(transaction, post, databasePost, userName);
   }
 
@@ -304,11 +594,12 @@ export default class Importer {
         const content = post.trail[position];
         const last = (position == post.trail.length - 1) && content.blog.name == userName;
         const databaseBlogName = await this.getBlogName(transaction, content.blog.name || userName);        
+        const body = this.sanitizeImageUrls(content['content_raw']);
 
         const data = [
           content.post.id,
-          crypto.createHash('sha256').update(content['content_raw'],'utf-8').digest('hex'),
-          content['content_raw'],
+          crypto.createHash('sha256').update(this.sanitizeImageUrls(body).replaceAll("\n",""),'utf-8').digest('hex'),
+          this.sanitizeImageUrls(body),
           databaseBlogName.id
         ];
 
@@ -331,6 +622,11 @@ export default class Importer {
       let content = await this.database.Content.findOne({where: { tumblr_id: data[0], version: data[1] }, transaction: transaction });
       contentId = content.id;
       this.stats['dup_content'] += 1;
+
+      // also track blog renames through contents if possible
+      if (content.blogNameId != data[3]) {
+        await this.mergeBlogs(transaction, data[3], content.blogNameId, 'rename', { content_id: contentId });
+      }
     }
 
     await this.database.sequelize.query("INSERT INTO post_contents (post_id,content_id,position,is_last) VALUES (?,?,?,?) ON CONFLICT DO NOTHING;",{
@@ -340,17 +636,20 @@ export default class Importer {
     });
   }
 
+  getPhotoUrl(photo) {
+    let sizes = photo['alt_sizes'].slice(0);
+    if (photo['original_size']) {
+      sizes.push(photo['original_size']);
+    }
+    sizes.sort((a,b) => b.width - a.width);
+    return sizes[0].url;
+  }
+
   async importPhotos(transaction, post, databasePost) {
     if (post.photos) {
       for (let position = 0; position < post.photos.length; position++) {
         let photo = post.photos[position];
-        let sizes = photo['alt_sizes'].slice(0);
-        if (photo['original_size']) {
-          sizes.push(photo['original_size']);
-        }
-        sizes.sort((a,b) => b.width - a.width);
-
-        let url = sizes[0].url;
+        let url = this.getPhotoUrl(photo);
 
         await this.saveResource(transaction, 'photo', url, photo, databasePost, position);
       }
@@ -358,11 +657,17 @@ export default class Importer {
   }
 
   async getBlogName(transaction, userName) {
-    userName = userName.substring(0,32);
+    if (typeof userName != 'number') {
+      userName = userName.substring(0,32);
+    }
     let databaseBlogName = this.cachedBlogNames[userName];
 
     if (!databaseBlogName) {
-      [databaseBlogName, ] = await this.database.BlogName.findCreateFind({where: { name: userName }, defaults: { name: userName }, transaction: transaction});
+      if (typeof userName == 'number') {
+        databaseBlogName = await this.database.BlogName.findByPk(userName, {transaction: transaction});
+      } else {
+        [databaseBlogName, ] = await this.database.BlogName.findCreateFind({where: { name: userName }, defaults: { name: userName }, transaction: transaction});
+      }
       this.cachedBlogNames[userName] = databaseBlogName;
     }
 
@@ -372,6 +677,9 @@ export default class Importer {
   async mergeBlogs(transaction, blogName1, blogName2, type, data) {
     if (blogName1 == blogName2)
       return;
+
+    if (!blogName1) return;
+    if (!blogName2) return;
 
     if (this.cachedBlogLinks[blogName1] && this.cachedBlogLinks[blogName1][blogName2] == type)
       return;
@@ -389,22 +697,70 @@ export default class Importer {
     this.cachedBlogLinks[blogName1][blogName2] = type;
   }
 
+  // let's remove the prefix from image links both to conserve space and to make sure we don't differentiate between images on a different mirror server
+  sanitizeImageUrls(data) {
+    if (typeof data === 'string') { 
+      return data.replaceAll(/https:\/\/\d+.media.tumblr.com\//g,'t:');
+    } else if (Array.isArray(data)) {
+      let result = [];
+      for (let i = 0; i< data.length; i++) {
+        result.push(this.sanitizeImageUrls(data[i]));
+      }
+      return result;
+    } else if (lodash.isObject(data)) {
+      let result = {}
+      for (var k in data) {
+        result[k] = this.sanitizeImageUrls(data[k]);
+      }
+      return result;
+    } else {
+      return data;
+    }
+  }
+
+  // let's not consider the metadata changed if the only change in it was a switch between http and https, and some cleanup in audio and video metas
+  normalizeMetadata(data) {
+    if (typeof data === 'string') { 
+      return data.replaceAll(/https?:\/\//g,'https://');
+    } else if (Array.isArray(data)) {
+      let result = [];
+      for (let i = 0; i< data.length; i++) {
+        result.push(this.normalizeMetadata(data[i]));
+      }
+      return result;
+    } else if (lodash.isObject(data)) {
+      let result = {}
+      for (var k in data) {
+        if (k!='embed' && k!='player') {
+          result[k] = this.normalizeMetadata(data[k]);
+        }
+      }
+      return result;
+    } else {
+      return data;
+    }
+  }
+
   async saveResource(transaction, type, url, metadata, databasePost, position) {
     if (!url) {
       return;
     }
+    let meta = Object.assign({}, metadata);
+    meta['alt_sizes'] = '';
+    meta['original_size'] = '';
+
     if (url.length>=255) {
-      metadata['full_url'] = url;
+      meta['full_url'] = url;
       url = crypto.createHash('sha256').update(url).digest('base64');
     }
-    let resource = await this.database.Resource.findOne({ where:{ url: url }, transaction: transaction });
+    let resource = await this.database.Resource.findOne({ where:{ url: this.sanitizeImageUrls(url) }, transaction: transaction });
     if (!resource) {
       resource = await this.database.Resource.create({
         type: type,
-        url: url,
+        url: this.sanitizeImageUrls(url),
         local_url: null,
         external: url.indexOf('tumblr.com') == -1,
-        meta: metadata
+        meta: clearEmpties(meta)
       }, { transaction: transaction });
     }
 

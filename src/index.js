@@ -3,12 +3,13 @@
 import Database from './database.js';
 import Importer from './importer.js';
 import MarkdownExporter from './markdown_exporter.js';
+import crypto from 'crypto';
+
 
 async function run() {
   //const db = Database('sqlite:db.sqlite');
   const db = Database('postgres://postgres:postgresql@localhost:5432/tumblr');
   await db.sequelize.sync();
-  return;
   let importer = new Importer(db);
   importer.run();
 };
