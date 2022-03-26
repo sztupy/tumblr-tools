@@ -1,12 +1,8 @@
 import fs from 'fs';
 import lodash from 'lodash';
-import cheerio from 'cheerio';
 import Zip from 'node-stream-zip';
-import { promisify } from 'util';
 import Sequelize from 'sequelize';
 import crypto from 'crypto';
-
-const readFileAsync = promisify(fs.readFile);
 
 function clearEmpties(o) {
   for (var k in o) {
@@ -32,28 +28,33 @@ function clearEmpties(o) {
 }
 
 export default class Importer {
-  constructor(database) {
+  constructor(database, fileName, options = {}) {
     this.database = database;
+    this.fileName = fileName;
+    this.options = options;
+
     this.cachedBlogs = {};
     this.cachedBlogLinks = {};
     this.cachedBlogNames = {};
     this.cachedTags = {};
     this.cachedLanguages = {};
+
     this.stats = {};
+
     this.start = false;
+
     this.currentImport = null;
     this.lastImport = null;
   }
 
   run() {
-    const fileName = "d:/magyar-tumbli-2022-03-12.zip";
-    const { birthtime } = fs.statSync(fileName);
-    const zip = new Zip({file: fileName});
+    const { birthtime } = fs.statSync(this.fileName);
+    const zip = new Zip({file: this.fileName});
 
     zip.on('ready', async () => {
       const importData = {
         file_date: birthtime,
-        file_name: fileName,
+        file_name: this.fileName,
         phase: 'need_import'
       };
 
@@ -69,7 +70,11 @@ export default class Importer {
       let counter = 0;
 
       for (const entry of Object.values(zip.entries())) {
-        if (entry.name.indexOf('dump/21stcenturydigitalboy/dump-1500.json') != -1) {
+        if (this.options['skip_until']) {
+          if (entry.name.indexOf(this.options['skip_until']) != -1) {
+            this.start = true;
+          }
+        } else {
           this.start = true;
         }
         if (this.start && entry.isFile) {
@@ -290,7 +295,7 @@ export default class Importer {
 
         // 1. check if any of the blog names have changed. This can happen is a blog gets renamed so we can use this detail to link blogs together
         // note we do not update these on the post, we keep the original details, unless we obtained new data that was not there yet. This can happen with some legacy posts
-        
+
         if (data.blogNameId != databasePost.blogNameId) {
           await this.mergeBlogs(transaction, data.blogNameId, databasePost.blogNameId, 'rename', { post_id: databasePost.id });
         }
@@ -310,7 +315,7 @@ export default class Importer {
           newArchive['from_blog'] = 'empty';
           console.log("FROM BLOG ID added " + databasePost.id);
         }
-        
+
         if (data.rootBlogNameId && !databasePost.rootBlogNameId) {
           databasePost.rootBlogNameId = data.rootBlogNameId;
           postChanged = true;
@@ -324,7 +329,7 @@ export default class Importer {
           newArchive['root_id'] = 'empty';
           console.log("ROOT TUMBLR ID added " + databasePost.id);
         }
-        
+
         if (data.from_tumblr_id && !databasePost.from_tumblr_id) {
           databasePost.from_tumblr_id = data.from_tumblr_id;
           postChanged = true;
@@ -408,7 +413,7 @@ export default class Importer {
               await this.database.sequelize.query("DELETE FROM post_contents WHERE position = -1 AND post_id = ?", {
                 replacements: [ databasePost.id ],
                 type: Sequelize.QueryTypes.RAW,
-                transaction: transaction    
+                transaction: transaction
               });
 
               console.log("Root content changed on old post " + databasePost.id);
@@ -422,7 +427,7 @@ export default class Importer {
             await this.database.sequelize.query("DELETE FROM post_contents WHERE position = -1 AND post_id = ?", {
               replacements: [ databasePost.id ],
               type: Sequelize.QueryTypes.RAW,
-              transaction: transaction    
+              transaction: transaction
             });
 
             console.log("Root content removed on old post " + databasePost.id);
@@ -436,7 +441,7 @@ export default class Importer {
             // all good nothing to do
           }
         }
-        
+
         // check if the trail has changes
         changed = false;
         post.trail ||= [];
@@ -550,7 +555,7 @@ export default class Importer {
           await databasePost.save({ transaction: transaction });
         }
       }
-        
+
       if (post.post_author) {
         // you can enable showing the post's real author on sub-blogs. If this is eanbled we can actually see who is controlling a sub-blog
         await this.mergeBlogs(transaction, post.post_author, userName, 'author', { post_id: databasePost.id });
@@ -578,7 +583,7 @@ export default class Importer {
           type: Sequelize.QueryTypes.RAW,
           transaction: transaction
         });
-      } 
+      }
     }
 
     // this is where we save the photos linked to a post. This usually happens for photo type posts, but it can also happen for link ones as well
@@ -593,7 +598,7 @@ export default class Importer {
       for (let position = 0; position < post.trail.length; position++) {
         const content = post.trail[position];
         const last = (position == post.trail.length - 1) && content.blog.name == userName;
-        const databaseBlogName = await this.getBlogName(transaction, content.blog.name || userName);        
+        const databaseBlogName = await this.getBlogName(transaction, content.blog.name || userName);
         const body = this.sanitizeImageUrls(content['content_raw']);
 
         const data = [
@@ -699,7 +704,7 @@ export default class Importer {
 
   // let's remove the prefix from image links both to conserve space and to make sure we don't differentiate between images on a different mirror server
   sanitizeImageUrls(data) {
-    if (typeof data === 'string') { 
+    if (typeof data === 'string') {
       return data.replaceAll(/https:\/\/\d+.media.tumblr.com\//g,'t:');
     } else if (Array.isArray(data)) {
       let result = [];
@@ -720,7 +725,7 @@ export default class Importer {
 
   // let's not consider the metadata changed if the only change in it was a switch between http and https, and some cleanup in audio and video metas
   normalizeMetadata(data) {
-    if (typeof data === 'string') { 
+    if (typeof data === 'string') {
       return data.replaceAll(/https?:\/\//g,'https://');
     } else if (Array.isArray(data)) {
       let result = [];
@@ -769,7 +774,7 @@ export default class Importer {
       type: Sequelize.QueryTypes.RAW,
       transaction: transaction
     });
-  
+
     return resource;
   }
 
