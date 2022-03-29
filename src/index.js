@@ -3,13 +3,19 @@
 import Database from './database.js';
 import Importer from './importer.js';
 import crypto from 'crypto';
+import Processor from './processor.js';
 
 async function run() {
   //const db = Database('sqlite:db.sqlite');
-  const db = Database('postgres://localhost:5432/tumblr');
+  const db = Database('postgres://localhost:5432/tumblr', {
+  //  skipProcessingIndices: true
+  });
   await db.sequelize.sync();
-  let importer = new Importer(db,'/filename.zip');
-  importer.run();
+  console.log("Database connected");
+  // let importer = new Importer(db,'/filename.zip');
+  // await importer.run();
+  // let processor = new Processor(db);
+  // await processor.run();
 };
 
 run();

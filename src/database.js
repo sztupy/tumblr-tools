@@ -1,6 +1,9 @@
 import Sequelize from 'sequelize';
 
-export default function(databaseString) {
+export default function(databaseString, options = {}) {
+  // Skip some indices that would speed up the processing work. Note if these indices have already been created they should be deleted manually, this options just ensures they are not re-created automatically at startup
+  const skipProcessingIndices = options['skipProcessingIndices'];
+
   const sequelize = new Sequelize(databaseString, {
     logging: false,
     define: {
@@ -78,7 +81,7 @@ export default function(databaseString) {
     from_tumblr_id: { type: Sequelize.BIGINT },
     processed: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: false },
   },{
-    indexes: [
+    indexes: skipProcessingIndices ? [] : [
       { fields: [ 'tumblr_id' ] },
       { fields: [ 'type' ] },
       { fields: [ 'date' ] },
@@ -98,13 +101,21 @@ export default function(databaseString) {
   Post.belongsTo(BlogName, { as: 'root_blog_name' } );
 
   // the content of the post above, including it's trail
-  const Content = sequelize.define('content', {
-    tumblr_id: { type: Sequelize.BIGINT, unique: 'tumblr_content_version' },
-    version: { type: Sequelize.STRING(64), unique: 'tumblr_content_version' },
+  let contentOptions = {
+    tumblr_id: { type: Sequelize.BIGINT },
+    version: { type: Sequelize.STRING(64) },
     text: { type: Sequelize.TEXT },
     processed: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: false },
-  },{
-    indexes: [
+  };
+
+  if (!skipProcessingIndices) {
+    contentOptions.tumblr_id.unique = 'tumblr_content_version';
+    contentOptions.version.unique = 'tumblr_content_version';
+  }
+
+  const Content = sequelize.define('content', contentOptions, {
+    indexes: skipProcessingIndices ? [] :
+    [
       { fields: [ 'tumblr_id' ] },
       { fields: [ 'version' ] },
       { fields: [ 'blog_name_id' ] },
@@ -183,15 +194,57 @@ export default function(databaseString) {
     name: { type: Sequelize.STRING }
   },{
     indexes: [
-      { fields: [ 'name' ] }
+      { fields: [ 'name' ], unique: true }
     ]
   });
 
-  Post.belongsToMany(Language, { through: 'post_languages'});
-  Language.belongsToMany(Post, { through: 'post_languages'});
+  const PostLanguage = sequelize.define('post_languages', {
+    percentage: { type: Sequelize.INTEGER },
+    score: { type: Sequelize.INTEGER }
+  },{
+    indexes: [
+      { fields: [ 'percentage' ]},
+      { fields: [ 'score' ]}
+    ]
+  });
 
-  Content.belongsToMany(Language, { through: 'content_languages'});
-  Language.belongsToMany(Content, { through: 'content_languages'});
+  const ContentLanguage = sequelize.define('content_languages', {
+    percentage: { type: Sequelize.INTEGER },
+    score: { type: Sequelize.INTEGER }
+  },{
+    indexes: [
+      { fields: [ 'percentage' ]},
+      { fields: [ 'score' ]}
+    ]
+  });
+
+  Post.belongsToMany(Language, { through: PostLanguage});
+  Language.belongsToMany(Post, { through: PostLanguage});
+
+  Content.belongsToMany(Language, { through: ContentLanguage});
+  Language.belongsToMany(Content, { through: ContentLanguage});
+
+  const Stats = sequelize.define('stats', {
+    from: { type: Sequelize.DATE },
+    to: { type: Sequelize.DATE },
+    posts_count: { type: Sequelize.BIGINT,  },
+    contents_count: { type: Sequelize.BIGINT },
+    posts_bytes: { type: Sequelize.BIGINT },
+    contents_bytes: { type: Sequelize.BIGINT },
+    reblogs: { type: Sequelize.BIGINT },
+
+  },{
+    indexes: [
+      { fields: [ 'from' ] },
+      { field: [ 'to' ] }
+    ]
+  });
+
+  Stats.belongsTo(Language);
+  Stats.belongsTo(BlogName);
+  Stats.belongsTo(Blog);
+  BlogName.hasMany(Stats);
+  Blog.hasMany(Stats);
 
   // the specific import we are doing, including the last IDs that we imported during this batch
   const Import = sequelize.define('imports', {
@@ -222,6 +275,7 @@ export default function(databaseString) {
     Content: Content,
     Resource: Resource,
     Tag: Tag,
-    Import: Import
+    Import: Import,
+    Stats: Stats
   }
 }

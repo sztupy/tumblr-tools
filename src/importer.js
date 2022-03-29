@@ -70,8 +70,8 @@ export default class Importer {
       let counter = 0;
 
       for (const entry of Object.values(zip.entries())) {
-        if (this.options['skip_until']) {
-          if (entry.name.indexOf(this.options['skip_until']) != -1) {
+        if (this.options['skipUntil']) {
+          if (entry.name.indexOf(this.options['skipUntil']) != -1) {
             this.start = true;
           }
         } else {
