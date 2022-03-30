@@ -163,7 +163,7 @@ export default function(databaseString, options = {}) {
     position: { type: Sequelize.INTEGER }
   },{
     indexes: [
-      { fields: [ 'position' ]}
+      { fields: [ 'position' ]} // which resource is this in the post
     ]
   });
 
@@ -183,7 +183,7 @@ export default function(databaseString, options = {}) {
     position: { type: Sequelize.INTEGER }
   },{
     indexes: [
-      { fields: [ 'position' ]}
+      { fields: [ 'position' ]} // which tag is this in the post
     ]
   });
 
@@ -203,8 +203,8 @@ export default function(databaseString, options = {}) {
     score: { type: Sequelize.INTEGER }
   },{
     indexes: [
-      { fields: [ 'percentage' ]},
-      { fields: [ 'score' ]}
+      { fields: [ 'percentage' ]}, // values from CLD
+      { fields: [ 'score' ]} // values from CLD
     ]
   });
 
@@ -213,8 +213,8 @@ export default function(databaseString, options = {}) {
     score: { type: Sequelize.INTEGER }
   },{
     indexes: [
-      { fields: [ 'percentage' ]},
-      { fields: [ 'score' ]}
+      { fields: [ 'percentage' ]}, // values from CLD
+      { fields: [ 'score' ]} // values from CLD
     ]
   });
 
@@ -227,16 +227,18 @@ export default function(databaseString, options = {}) {
   const Stats = sequelize.define('stats', {
     from: { type: Sequelize.DATE },
     to: { type: Sequelize.DATE },
-    posts_count: { type: Sequelize.BIGINT,  },
-    contents_count: { type: Sequelize.BIGINT },
-    posts_bytes: { type: Sequelize.BIGINT },
-    contents_bytes: { type: Sequelize.BIGINT },
-    reblogs: { type: Sequelize.BIGINT },
-
+    name: { type: Sequelize.STRING },
+    posts_count: { type: Sequelize.BIGINT }, // the number of posts in the interval matching the language
+    contents_count: { type: Sequelize.BIGINT }, // the number of contents in the interval matching the language
+    posts_bytes: { type: Sequelize.BIGINT }, // the number of bytes in total for the posts in the interval matching the language
+    contents_bytes: { type: Sequelize.BIGINT }, // the number of bytes in total for the contents in the interval matching the language
+    appearances: { type: Sequelize.BIGINT }, // the number of times the user appears in other people's trails for this language
+    reblog_reach: { type: Sequelize. BIGINT }, // the number of times the user has been reblogged directly for this language
+    root_reach: { type: Sequelize.BIGINT }, // the number of times the user's root content appears in other people's trails for this language
   },{
     indexes: [
       { fields: [ 'from' ] },
-      { field: [ 'to' ] }
+      { fields: [ 'to' ] }
     ]
   });
 
@@ -262,8 +264,10 @@ export default function(databaseString, options = {}) {
   Import.belongsTo(BlogName, { constraints: false });
   Import.belongsTo(BlogLinks, { constraints: false });
   Import.belongsTo(Language, { constraints: false } );
+  Import.belongsTo(Stats, { constraints: false } );
 
   BlogLinks.belongsTo(Import);
+  Stats.belongsTo(Import);
 
   return {
     sequelize: sequelize,

@@ -2,8 +2,8 @@
 // code. You can also put them in separate files and import them here.
 import Database from './database.js';
 import Importer from './importer.js';
-import crypto from 'crypto';
 import Processor from './processor.js';
+import Finalizer from './finalizer.js';
 
 async function run() {
   //const db = Database('sqlite:db.sqlite');
@@ -16,6 +16,8 @@ async function run() {
   // await importer.run();
   // let processor = new Processor(db);
   // await processor.run();
+  let finalizer = new Finalizer(db);
+  await finalizer.run();
 };
 
 run();

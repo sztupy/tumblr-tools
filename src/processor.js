@@ -1,12 +1,10 @@
-import fs from 'fs';
-import lodash from 'lodash';
-import Zip from 'node-stream-zip';
+// Process a previously imported batch of data and fill in language and blog ping informations
+
 import Sequelize from 'sequelize';
-import crypto from 'crypto';
 import cld from 'cld';
 
 export default class Processor {
-  constructor(database, fileName, options = {}) {
+  constructor(database, options = {}) {
     this.database = database;
     this.options = options;
 
@@ -122,6 +120,9 @@ export default class Processor {
     console.log("Finished processing");
 
     this.currentImport.phase = 'processed';
+    this.currentImport.blogId = (await this.database.sequelize.query("SELECT MAX(id) as id from blogs;"))[0][0]['id'];
+    this.currentImport.blogLinkId = (await this.database.sequelize.query("SELECT MAX(id) as id from blog_links;"))[0][0]['id'];
+    this.currentImport.languageId = (await this.database.sequelize.query("SELECT MAX(id) as id from languages;"))[0][0]['id'];
     this.currentImport.save();
 
     console.log(this.currentImport);
@@ -135,10 +136,10 @@ export default class Processor {
       if (post.title) {
          text = post.title + "\n";
       }
-      for (const tag of (await post.getTags())) {
+      for (const tag of (await post.getTags({ transaction: transaction }))) {
         text += tag.name + "\n";
       }
-      for (const content of (await post.getContents())) {
+      for (const content of (await post.getContents({ transaction: transaction }))) {
         if (content.post_contents.position == -1 || content.post_contents.is_last) {
           text += content.text + "\n";
         }

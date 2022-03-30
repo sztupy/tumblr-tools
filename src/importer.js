@@ -1,3 +1,4 @@
+// imports a ZIP file containing Tumblr API dumps in JSON format into the database
 import fs from 'fs';
 import lodash from 'lodash';
 import Zip from 'node-stream-zip';
