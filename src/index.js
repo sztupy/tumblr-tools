@@ -7,16 +7,16 @@ import Finalizer from './finalizer.js';
 
 async function run() {
   //const db = Database('sqlite:db.sqlite');
-  const db = Database('postgres://localhost:5432/tumblr', {
+  const db = Database('postgres://postgres:postgresql@localhost:5432/tumblr', {
   //  skipProcessingIndices: true
   });
   await db.sequelize.sync();
   console.log("Database connected");
   // let importer = new Importer(db,'/filename.zip');
   // await importer.run();
-  // let processor = new Processor(db);
+  // le t processor = new Processor(db);
   // await processor.run();
-  let finalizer = new Finalizer(db);
+  let finalizer = new Finalizer(db, 'HUNGARIAN', { skipBlogUpdates: true, skipBlogMerges: true });
   await finalizer.run();
 };
 

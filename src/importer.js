@@ -143,8 +143,7 @@ export default class Importer {
           this.lastImport &&
           databasePost.id <= this.lastImport.postId &&
           (!databasePost.meta['archive'] || !databasePost.meta['archive'][this.lastImport.id])
-        )
-      ) {
+        )) {
       let meta = {};
 
       meta['source'] = {
@@ -167,6 +166,10 @@ export default class Importer {
 
       if (post['post_author']) {
         meta['author'] = await this.getBlogName(transaction, post['post_author']).id;
+      }
+
+      if (post['is_submission']) {
+        meta['is_submission'] = true;
       }
 
       let probableRootName = meta['reblogged_root_name'];
@@ -298,15 +301,25 @@ export default class Importer {
         // note we do not update these on the post, we keep the original details, unless we obtained new data that was not there yet. This can happen with some legacy posts
 
         if (data.blogNameId != databasePost.blogNameId) {
-          await this.mergeBlogs(transaction, data.blogNameId, databasePost.blogNameId, 'rename', { post_id: databasePost.id });
+          await this.mergeBlogs(transaction, data.blogNameId, databasePost.blogNameId, 'rename', { post_id: databasePost.id, type: 'main' });
         }
 
         if (data.fromBlogNameId != databasePost.fromBlogNameId) {
-          await this.mergeBlogs(transaction, data.fromBlogNameId, databasePost.fromBlogNameId, 'rename', { post_id: databasePost.id });
+          await this.mergeBlogs(transaction, data.fromBlogNameId, databasePost.fromBlogNameId, 'rename', { post_id: databasePost.id, type: 'from' });
         }
 
         if (data.rootBlogNameId != databasePost.rootBlogNameId) {
-          await this.mergeBlogs(transaction, data.rootBlogNameId, databasePost.rootBlogNameId, 'rename', { post_id: databasePost.id });
+          // we might have used a fake/probable root in the past so likely this is the correct one actually
+          if (post.reblogged_root_name) {
+            databasePost.rootBlogNameId = data.rootBlogNameId;
+            postChanged = true;
+          }
+        }
+
+        if (post['is_submission']) {
+          databasePost.meta.is_submission = true;
+          databasePost.changed('meta',true);
+          postChanged = true;
         }
 
         // these should not happen but can occasionally so if we managed to obtain some new information we'll add them
@@ -557,7 +570,7 @@ export default class Importer {
         }
       }
 
-      if (post.post_author) {
+      if (post.post_author && !post['is_submission']) {
         // you can enable showing the post's real author on sub-blogs. If this is eanbled we can actually see who is controlling a sub-blog
         await this.mergeBlogs(transaction, post.post_author, userName, 'author', { post_id: databasePost.id });
       }
@@ -599,14 +612,18 @@ export default class Importer {
       for (let position = 0; position < post.trail.length; position++) {
         const content = post.trail[position];
         const last = (position == post.trail.length - 1) && content.blog.name == userName;
-        const databaseBlogName = await this.getBlogName(transaction, content.blog.name || userName);
+        let blogNameId = null;
+        if (content.blog.name) {
+          const databaseBlogName = await this.getBlogName(transaction, content.blog.name);
+          blogNameId = databaseBlogName.id;
+        }
         const body = this.sanitizeImageUrls(content['content_raw']);
 
         const data = [
           content.post.id,
           crypto.createHash('sha256').update(this.sanitizeImageUrls(body).replaceAll("\n",""),'utf-8').digest('hex'),
           this.sanitizeImageUrls(body),
-          databaseBlogName.id
+          blogNameId
         ];
 
         await this.importContentData(transaction, data, databasePost, position, last);
@@ -628,10 +645,13 @@ export default class Importer {
       let content = await this.database.Content.findOne({where: { tumblr_id: data[0], version: data[1] }, transaction: transaction });
       contentId = content.id;
       this.stats['dup_content'] += 1;
-
-      // also track blog renames through contents if possible
-      if (content.blogNameId != data[3]) {
-        await this.mergeBlogs(transaction, data[3], content.blogNameId, 'rename', { content_id: contentId });
+      if (!content.blogNameId && data[3]) {
+        content.blogNameId = data[3];
+        await content.save({transaction: transaction});
+      } else {
+        if (content.blogNameId != data[3]) {
+          await this.mergeBlogs(transaction, data[3], content.blogNameId, 'rename', { content_id: contentId });
+        }
       }
     }
 

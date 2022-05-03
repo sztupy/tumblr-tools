@@ -1,3 +1,5 @@
+import Sequelize from 'sequelize';
+
 export default class Finalizer {
   constructor(database, targetLanguage = "HUNGARIAN", options = {}) {
     this.targetLanguage = targetLanguage;
@@ -33,31 +35,46 @@ export default class Finalizer {
       console.log("Making sure blogs exist in the database");
       await Promise.all(result.map(blog => this.getBlog(transaction, blog.name)));
       await transaction.commit();
+    }
 
+    if (!this.options['skipBlogMerges']) {
       console.log("Merging blogs");
       let blogs = await this.database.Blog.findAll();
-      transaction = await this.database.sequelize.transaction();
+      const transaction = await this.database.sequelize.transaction();
 
       for (const blog of blogs) {
-        let blogName = await this.getBlogName(transaction, blog.name);
+        let blogName = await this.database.BlogName.findOne({ where: { name: blog.name }, transaction: transaction });
 
-        let links = await this.database.BlogLinks.findAll({ where: { sourceId: blogName.id, type: 'rename' }});
-        if (!links.isEmpty()) {
-          console.log("Blog merge source");
-          console.log(links);
-          return;
+        if (!blogName.blogId) {
+          blogName.blogId = blog.id;
+          await blogName.save({ transaction: transaction });
         }
 
-        links = await this.database.BlogLinks.findAll({ where: { destinationId: blogName.id, type: 'rename' }});
-        if (!links.isEmpty()) {
-          console.log("Blog merge destination");
-          console.log(links);
-          return;
-        }
+        let links = await this.database.BlogLinks.findAll({ where: { sourceId: blogName.id, type: 'rename' }, transaction: transaction });
+        if (links.length > 0) {
+          for (const link of links) {
+            let destinationBlogName = await this.database.BlogName.findByPk(link.destinationId, { transaction: transaction });
 
-        blogName.blogId = blog.id;
-        await blogName.save({ transaction: transaction });
+            if (destinationBlogName.blogId) {
+              if (destinationBlogName.blogId != blog.id) {
+                console.log("Merging blog " + destinationBlogName.name + " into " + blog.name + " with others");
+                await this.database.sequelize.query("UPDATE blog_names SET blog_id = ? WHERE blog_id = ?", {
+                  replacements: [blog.id, destinationBlogName.blogId],
+                  transaction: transaction
+                });
+              }
+            } else {
+              console.log("Merging blog " + destinationBlogName.name + " into " + blog.name);
+              destinationBlogName.blogId = blog.id;
+              await destinationBlogName.save({ transaction: transaction });
+            }
+          }
+        }
       }
+
+      await this.database.sequelize.query("DELETE FROM blogs WHERE NOT EXISTS (SELECT id FROM blog_names WHERE blog_id = blogs.id)", {
+        transaction: transaction
+      });
       await transaction.commit();
     }
 
@@ -75,10 +92,10 @@ export default class Finalizer {
       spans[year] = {};
       spans[year].start = {};
       spans[year].start.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts WHERE date<'"+year+"-01-01';"))[0][0]['date'];
-    spans[year].start.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].start.date ]}))[0][0]['id'];
-    spans[year].end = {};
-    spans[year].end.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'"+(year+1)+"-01-01';"))[0][0]['date'];
-    spans[year].end.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].end.date ]}))[0][0]['id'];
+      spans[year].start.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].start.date ]}))[0][0]['id'];
+      spans[year].end = {};
+      spans[year].end.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'"+(year+1)+"-01-01';"))[0][0]['date'];
+      spans[year].end.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].end.date ]}))[0][0]['id'];
       if (spans[year].end.date === null) {
         spans[year].end = spans.all.end;
         spans.current = spans[year];
@@ -132,6 +149,7 @@ export default class Finalizer {
     if (existing.length > 0) {
       return;
     }
+    console.log("Included blogs: ", blog.blog_names.map(blog_name => blog_name.name).join());
     for (const spanName in spans) {
       let span = spans[spanName];
       let blogStats = {};
