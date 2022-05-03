@@ -18,11 +18,15 @@ export default class Finalizer {
     this.currentImport = null;
   }
 
-  async run() {
+  async initialize() {
     this.currentImport = await this.database.Import.findOne({ order: [ [ 'id','DESC'] ] });
     if (typeof this.targetLanguage === 'string') {
       this.targetLanguage = await this.database.Language.findOne({ where: { name: this.targetLanguage }});
     }
+  }
+
+  async run() {
+    await this.initialize();
 
     if (!this.options['skipBlogUpdates']) {
       console.log("Obtaining blogs tied to the target language");
@@ -78,31 +82,7 @@ export default class Finalizer {
       await transaction.commit();
     }
 
-    console.log("Obtaining timespans");
-    let spans = {};
-    spans.all = {};
-    spans.all.start = {};
-    spans.all.start.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'2006-01-01';"))[0][0]['date'];
-    spans.all.start.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts;"))[0][0]['id'];
-    spans.all.end = {};
-    spans.all.end.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts;"))[0][0]['date'];
-    spans.all.end.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans.all.end.date ]}))[0][0]['id'];
-
-    for (let year = 2010; year <= new Date().getFullYear(); year++) {
-      spans[year] = {};
-      spans[year].start = {};
-      spans[year].start.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts WHERE date<'"+year+"-01-01';"))[0][0]['date'];
-      spans[year].start.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].start.date ]}))[0][0]['id'];
-      spans[year].end = {};
-      spans[year].end.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'"+(year+1)+"-01-01';"))[0][0]['date'];
-      spans[year].end.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].end.date ]}))[0][0]['id'];
-      if (spans[year].end.date === null) {
-        spans[year].end = spans.all.end;
-        spans.current = spans[year];
-        delete spans[year];
-        break;
-      }
-    }
+    let spans = await this.getSpans();
 
     console.log("Obtaining statistics");
     let blogs = await this.database.Blog.findAll({ include: this.database.BlogName });
@@ -140,6 +120,50 @@ export default class Finalizer {
 
     console.log(this.currentImport);
   }
+
+
+  async getSpans() {
+    console.log("Obtaining timespans");
+    let spans = {};
+    spans.all = {};
+    spans.all.start = {};
+    spans.all.start.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'2006-01-01';"))[0][0]['date'];
+    spans.all.start.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts;"))[0][0]['id'];
+    spans.all.end = {};
+    spans.all.end.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts;"))[0][0]['date'];
+    spans.all.end.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans.all.end.date ]}))[0][0]['id'];
+
+    for (let year = 2010; year <= new Date().getFullYear(); year++) {
+      spans[year] = {};
+      spans[year].start = {};
+      spans[year].start.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts WHERE date<'"+year+"-01-01';"))[0][0]['date'];
+      spans[year].start.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].start.date ]}))[0][0]['id'];
+      spans[year].end = {};
+      spans[year].end.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'"+(year+1)+"-01-01';"))[0][0]['date'];
+      spans[year].end.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].end.date ]}))[0][0]['id'];
+      if (spans[year].end.date === null) {
+        spans[year].end = spans.all.end;
+        spans.current = spans[year];
+        delete spans[year];
+        break;
+      }
+    }
+
+    return spans;
+  }
+
+  async runStats(blogName) {
+    await this.initialize();
+
+    let blog = await this.database.Blog.findOne({ where: { name: blogName }, include: this.database.BlogName });
+    let spans = await this.getSpans();
+
+    const transaction = await this.database.sequelize.transaction();
+    await this.runStatistics(transaction, spans, blog);
+    await transaction.commit();
+  }
+
+  // private
 
   async runStatistics(transaction, spans, blog) {
     let [existing, ] = await this.database.sequelize.query("SELECT id FROM stats where blog_id = ? AND import_id = ? LIMIT 1;",{

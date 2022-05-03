@@ -4,10 +4,10 @@ import Database from './database.js';
 import Importer from './importer.js';
 import Processor from './processor.js';
 import Finalizer from './finalizer.js';
+import Utils from './utils.js';
 
 async function run() {
-  //const db = Database('sqlite:db.sqlite');
-  const db = Database('postgres://postgres:postgresql@localhost:5432/tumblr', {
+  const db = Database('postgres://localhost:5432/tumblr', {
   //  skipProcessingIndices: true
   });
   await db.sequelize.sync();
@@ -16,8 +16,8 @@ async function run() {
   // await importer.run();
   // le t processor = new Processor(db);
   // await processor.run();
-  let finalizer = new Finalizer(db, 'HUNGARIAN', { skipBlogUpdates: true, skipBlogMerges: true });
-  await finalizer.run();
+  // let finalizer = new Finalizer(db, 'HUNGARIAN', { skipBlogUpdates: true, skipBlogMerges: true });
+  // await finalizer.run();
 };
 
 run();
