@@ -92,6 +92,9 @@ async function run() {
 
   // await utils.mergeBlogs('peppperedmind','mspepperpotts', { type: 'name_match' });
 
+  // await utils.mergeBlogs('eltiron','eltiron2', { type: 'name_match' });
+  // await utils.mergeBlogs('biro-ica','szukits-magda', { type: 'known_link' });
+
   // await utils.mergeBlogs('zitasagaim2pont0','zitasagaim2pont0-deactivated202',{type: 'deactivated'});
   // await utils.mergeBlogs('waldheimrudi','waldheimrudi-deactivated2021062',{type: 'deactivated'});
   // await utils.mergeBlogs('viki-ped1a','viki-ped1a-deactivated20161127',{type: 'deactivated'});
@@ -155,6 +158,15 @@ async function run() {
   // await utils.mergeBlogs('porta-del-paradiso','arvafiju-deactivated20150514',{type: 'deactivated'});
   // await utils.mergeBlogs('6li6li6','a-n-t-i-k-r-i-s-z-t-u-s-deactiv',{type: 'deactivated'});
   // await utils.mergeBlogs('a-kocsma-nemvot-nyitta','a-kocsma-nemvot-nyitta-deactiva',{type: 'deactivated'});
+
+  // await utils.mergeBlogs('kissloofahs','kissloofahs-reloaded', { type: 'name_match' });
+  // await utils.mergeBlogs('cilko','cilkomblr', { type: 'name_match' });
+  // await utils.mergeBlogs('keysersoza','keysersoza-official', { type: 'name_match' });
+  // await utils.mergeBlogs('tiny-ylang-ylang','tiny-ylang-ylang-2', { type: 'name_match' });
+  // await utils.mergeBlogs('heddagabber','heddagabberofficial', { type: 'name_match' });
+  // await utils.mergeBlogs('redblekbeta-deactivated20151004','redblek', { type: 'name_match' });
+  // await utils.mergeBlogs('dararea2','dararea', { type: 'name_match' });
+  // await utils.mergeBlogs('bastardofanarchy','bastardofanarchy-2', { type: 'name_match' });
 };
 
 run();

@@ -1,4 +1,5 @@
 import Sequelize from 'sequelize';
+import Utils from './utils.js';
 
 export default class Finalizer {
   constructor(database, targetLanguage = "HUNGARIAN", options = {}) {
@@ -16,6 +17,8 @@ export default class Finalizer {
     this.stats = {};
 
     this.currentImport = null;
+
+    this.utils = options.utils || new Utils(database, { finalizer: this });
   }
 
   async initialize() {
@@ -82,7 +85,7 @@ export default class Finalizer {
       await transaction.commit();
     }
 
-    let spans = await this.getSpans();
+    let spans = await this.utils.getSpans();
 
     console.log("Obtaining statistics");
     let blogs = await this.database.Blog.findAll({ include: this.database.BlogName });
@@ -121,42 +124,11 @@ export default class Finalizer {
     console.log(this.currentImport);
   }
 
-
-  async getSpans() {
-    console.log("Obtaining timespans");
-    let spans = {};
-    spans.all = {};
-    spans.all.start = {};
-    spans.all.start.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'2006-01-01';"))[0][0]['date'];
-    spans.all.start.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts;"))[0][0]['id'];
-    spans.all.end = {};
-    spans.all.end.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts;"))[0][0]['date'];
-    spans.all.end.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans.all.end.date ]}))[0][0]['id'];
-
-    for (let year = 2010; year <= new Date().getFullYear(); year++) {
-      spans[year] = {};
-      spans[year].start = {};
-      spans[year].start.date = (await this.database.sequelize.query("SELECT MAX(date) date FROM posts WHERE date<'"+year+"-01-01';"))[0][0]['date'];
-      spans[year].start.id = (await this.database.sequelize.query("SELECT MAX(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].start.date ]}))[0][0]['id'];
-      spans[year].end = {};
-      spans[year].end.date = (await this.database.sequelize.query("SELECT MIN(date) date FROM posts WHERE date>'"+(year+1)+"-01-01';"))[0][0]['date'];
-      spans[year].end.id = (await this.database.sequelize.query("SELECT MIN(tumblr_id) id FROM posts WHERE date = ?;", { replacements: [ spans[year].end.date ]}))[0][0]['id'];
-      if (spans[year].end.date === null) {
-        spans[year].end = spans.all.end;
-        spans.current = spans[year];
-        delete spans[year];
-        break;
-      }
-    }
-
-    return spans;
-  }
-
   async runStats(blogName) {
     await this.initialize();
 
     let blog = await this.database.Blog.findOne({ where: { name: blogName }, include: this.database.BlogName });
-    let spans = await this.getSpans();
+    let spans = await this.utils.getSpans();
 
     const transaction = await this.database.sequelize.transaction();
     await this.runStatistics(transaction, spans, blog);
