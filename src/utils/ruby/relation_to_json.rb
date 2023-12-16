@@ -11,8 +11,8 @@ ARGF.each_line do |line|
     blog1name = $1
     blog2name = $2
     year = $3
-    weight = $4
-    total = $5
+    weight = $4.to_i
+    total = $5.to_i
 
     BLOGS[blog1name] ||= { id: nil, links: {}}
     BLOGS[blog2name] ||= { id: nil, links: {} }
