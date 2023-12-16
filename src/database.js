@@ -1,11 +1,10 @@
 import Sequelize from 'sequelize';
 
 export default function(databaseString, options = {}) {
-  // Skip some indices that would speed up the processing work. Note if these indices have already been created they should be deleted manually, this options just ensures they are not re-created automatically at startup
-  const skipProcessingIndices = options['skipProcessingIndices'];
-
   const sequelize = new Sequelize(databaseString, {
-    logging: false,
+    // logging: false,
+    logging: (sql, timingMs) => { if (timingMs>100) console.log(`SLOW QUERY: ${sql} - Elapsed time: ${timingMs}ms`); },
+    benchmark: true,
     define: {
       underscored: true,
       timestamps: false,
@@ -27,6 +26,11 @@ export default function(databaseString, options = {}) {
       type: Sequelize.STRING,
       unique: true
     }
+  },{
+    indexes: [{
+      using: 'hash',
+      fields: ['name']
+    }]
   });
 
   BlogName.belongsTo(Blog);
@@ -81,7 +85,7 @@ export default function(databaseString, options = {}) {
     from_tumblr_id: { type: Sequelize.BIGINT },
     processed: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: false },
   },{
-    indexes: skipProcessingIndices ? [] : [
+    indexes: [
       { fields: [ 'tumblr_id' ] },
       { fields: [ 'type' ] },
       { fields: [ 'date' ] },
@@ -102,22 +106,18 @@ export default function(databaseString, options = {}) {
 
   // the content of the post above, including it's trail
   let contentOptions = {
-    tumblr_id: { type: Sequelize.BIGINT },
-    version: { type: Sequelize.STRING(64) },
+    tumblr_id: { type: Sequelize.BIGINT, unique: 'tumblr_content_version' },
+    version: { type: Sequelize.STRING(64), unique: 'tumblr_content_version' },
     text: { type: Sequelize.TEXT },
     processed: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: false },
   };
 
-  if (!skipProcessingIndices) {
-    contentOptions.tumblr_id.unique = 'tumblr_content_version';
-    contentOptions.version.unique = 'tumblr_content_version';
-  }
 
   const Content = sequelize.define('content', contentOptions, {
-    indexes: skipProcessingIndices ? [] :
-    [
+    indexes: [
       { fields: [ 'tumblr_id' ] },
       { fields: [ 'version' ] },
+      { fields: [ 'version' ], using: 'hash', name: 'contents_version_hash' },
       { fields: [ 'blog_name_id' ] },
       { fields: [ 'processed' ]}
     ]
@@ -153,6 +153,7 @@ export default function(databaseString, options = {}) {
   },{
     indexes: [
       { fields: [ 'url' ], unique: true },
+      { fields: [ 'url' ], using: 'hash', name: 'resources_url_hash' },
       { fields: [ 'local_url' ] },
       { fields: [ 'type' ] },
       { fields: [ 'external' ] }

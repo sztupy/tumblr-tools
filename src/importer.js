@@ -620,7 +620,7 @@ export default class Importer {
         const body = this.sanitizeImageUrls(content['content_raw']);
 
         const data = [
-          content.post.id,
+          content.post.id.replace("=",''), // some trail posts might have been made private later. These are still visible in reblog trails but the post id will have a '=' sign at the end
           crypto.createHash('sha256').update(this.sanitizeImageUrls(body).replaceAll("\n",""),'utf-8').digest('hex'),
           this.sanitizeImageUrls(body),
           blogNameId
