@@ -4,7 +4,7 @@ import Database from '../database.js';
 import Utils from '../utils.js';
 
 async function run() {
-  const db = Database('postgres://localhost:5432/tumblr', {
+  const db = Database('postgres://postgres:root@localhost:5432/tumblr', {
   });
   await db.sequelize.sync();
   console.log("Database connected");
@@ -181,7 +181,22 @@ async function run() {
   // await utils.mergeBlogs('tamasbereczky','bereczkytamas', { type: 'name_match' });
   // await utils.mergeBlogs('themarsa','palmsandsunglasses', { type: 'known_link' });
 
-  await utils.mergeBlogs('radomanci','kozimacanto', { type: 'known_link' });
+  // await utils.mergeBlogs('radomanci','kozimacanto', { type: 'known_link' });
+
+  // await utils.mergeBlogs('bzthemiddleagedviking', 'tudjukki-az-oreg-viking', { type: 'known_link' });
+  // await utils.mergeBlogs('tudjukki-a-viking-visszater', 'tudjukki-az-oreg-viking', { type: 'known_link' });
+
+  // await utils.mergeBlogs('szintelenkek-eg','szintelenkek-jeg', { type: 'name_match' });
+
+  // let blogs = await db.Blog.findAll({ order: [[ 'name', 'ASC' ]]});
+  // let run = false;
+  // for (const blog of blogs) {
+  //   if (blog.name == 'ezegykicsitbonyolult') { run = true; }
+  //   if (!run) continue;
+
+  //   console.log(`Setting latest name for ${blog.name}`);
+  //   await utils.assignLatestBlogName(blog.id);
+  // }
 };
 
 run();

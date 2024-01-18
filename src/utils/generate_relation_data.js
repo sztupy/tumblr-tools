@@ -5,7 +5,7 @@ import Utils from '../utils.js';
 
 async function run() {
   //const db = Database('sqlite:db.sqlite');
-  const db = Database('postgres://localhost:5432/tumblr', {
+  const db = Database('postgres://postgres:root@localhost:5432/tumblr', {
   //  skipProcessingIndices: true
   });
   await db.sequelize.sync();

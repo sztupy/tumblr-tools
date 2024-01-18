@@ -49,19 +49,19 @@ export default class Importer {
   }
 
   run() {
-    const { birthtime } = fs.statSync(this.fileName);
+    const { ctime } = fs.statSync(this.fileName);
     const zip = new Zip({file: this.fileName});
 
     zip.on('ready', async () => {
       const importData = {
-        file_date: birthtime,
+        file_date: ctime,
         file_name: this.fileName,
         phase: 'need_import'
       };
 
       [this.currentImport, ] = await this.database.Import.findCreateFind({
         where: {
-          file_date: birthtime
+          file_date: ctime
         },
         defaults: importData
       });
@@ -91,7 +91,8 @@ export default class Importer {
             counter = 0;
             console.log('Clearing cache');
           }
-          const blog = JSON.parse(zip.entryDataSync(entry));
+          // some audio metadata contains unicode NULLs, we get rid of all of them here
+          const blog = JSON.parse(zip.entryDataSync(entry).toString('utf8').replaceAll('\\u0000',''));
 
           if (blog.blog && blog.blog.name) {
             const transaction = await this.database.sequelize.transaction();

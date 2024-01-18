@@ -2,8 +2,8 @@ import Sequelize from 'sequelize';
 
 export default function(databaseString, options = {}) {
   const sequelize = new Sequelize(databaseString, {
-    // logging: false,
-    logging: (sql, timingMs) => { if (timingMs>100) console.log(`SLOW QUERY: ${sql} - Elapsed time: ${timingMs}ms`); },
+    logging: false,
+    //logging: (sql, timingMs) => { if (timingMs>1000) console.log(`SLOW QUERY: ${sql} - Elapsed time: ${timingMs}ms`); },
     benchmark: true,
     define: {
       underscored: true,

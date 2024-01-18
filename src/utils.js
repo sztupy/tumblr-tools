@@ -73,4 +73,8 @@ export default class Utils {
 
     return spans;
   }
+
+  async assignLatestBlogName(id) {
+    await this.database.sequelize.query("update blogs set name = (select name from (select blog_names.name as name, max(contents.tumblr_id) as maxid from blog_names join contents on contents.blog_name_id = blog_names.id where blog_names.blog_id = blogs.id group by blog_names.name) order by maxid desc limit 1) where blogs.id = ?", { replacements: [ id ] });
+  }
 }

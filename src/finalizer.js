@@ -52,6 +52,10 @@ export default class Finalizer {
       for (const blog of blogs) {
         let blogName = await this.database.BlogName.findOne({ where: { name: blog.name }, transaction: transaction });
 
+        if (!blogName) {
+          blogName = await this.getBlogName(transaction, blog.name);
+        }
+
         if (!blogName.blogId) {
           blogName.blogId = blog.id;
           await blogName.save({ transaction: transaction });
