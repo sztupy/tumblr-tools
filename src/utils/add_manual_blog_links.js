@@ -188,6 +188,12 @@ async function run() {
 
   // await utils.mergeBlogs('szintelenkek-eg','szintelenkek-jeg', { type: 'name_match' });
 
+  // await utils.mergeBlogs('malachiefconstant', 'sanlorenzoherald', { type: 'known_link' });
+  // await utils.mergeBlogs('betonlufi','b-eton-loofie', { type: 'known_link' });
+  // await utils.mergeBlogs('rendpartiliberalis','rendparti3', { type: 'known_link' });
+
+  // await utils.mergeBlogs('aliende1on','a-lo-nelkuli-aliende1on', { type: 'known_link' });
+
   // let blogs = await db.Blog.findAll({ order: [[ 'name', 'ASC' ]]});
   // let run = false;
   // for (const blog of blogs) {

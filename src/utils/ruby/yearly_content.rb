@@ -20,7 +20,7 @@ end
 TOP_BLOGS = {}
 
 YEARS.sort_by{|a,b| a}.each do |year,blogs|
-  blogs.sort_by{|a,b| -b}.take(25).each{|blog,value| TOP_BLOGS[blog] = true}
+  blogs.sort_by{|a,b| -b}.take(50).each{|blog,value| TOP_BLOGS[blog] = true}
 end
 
 BLOGS = TOP_BLOGS.keys.sort

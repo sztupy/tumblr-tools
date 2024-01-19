@@ -11,9 +11,8 @@ RED_EDGES = []
 EMPTY_EDGES = []
 CIRCULAR_EDGES = []
 
-
 ARGF.each_line do |line|
-  if line =~ /^(.*) (.*) (.*)$/
+  if line =~ /^(.*) (.*) all (.*) (.*)$/
     blog1name = $1
     blog1 = blog1name.tr('-','_')
 

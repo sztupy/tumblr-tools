@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-# reorder SVG so the red edges are put after the black ones
+# reorder SVG so the red edges are put after the black ones so they appear on top
 
 pos = nil
 edge_type = nil
@@ -36,6 +36,8 @@ ARGF.each_line do |line|
     if line =~ /#660000/
       edge_type = :save
     end
+  elsif line =~ /<polygon fill="#000000" stroke="#000000"/
+    puts line.gsub(/<polygon fill="#000000" stroke="#000000"/,'<polygon fill="#dddddd" stroke="#dddddd"')
   else
     puts line
   end

@@ -23,7 +23,7 @@ CIRCULAR_EDGES = []
 
 
 ARGF.each_line do |line|
-  if line =~ /^(.*) (.*) (.*)$/
+  if line =~ /^(.*) (.*) all (.*) (.*)$/
     blog1name = $1
     blog1 = blog1name.tr('-','_')
 
@@ -66,7 +66,7 @@ BLOGS_OUT.each_pair do |blog1, values|
     if !BLOGS[blog2][:cluster]
       BLOGS[blog2][:cluster] = "#{blog1}_#{blog2}"
     end
-    CLUSTERS["#{blog1}_#{blog2}"] = "#{BLOGS[blog1][:name]} & #{BLOGS[blog2][:name]}"
+    CLUSTERS["#{blog1}_#{blog2}"] = {name: "#{BLOGS[blog1][:name]} & #{BLOGS[blog2][:name]}", id: nil, count: 0 }
     RED_EDGES << [ blog1, blog2, values[:weight] ]
   end
 end
@@ -117,7 +117,7 @@ while count != 0
       if !value[:cluster]
         orphan += 1
         BLOGS[blog][:cluster] = "orphan_#{orphan}"
-        CLUSTERS["orphan_#{orphan}"] = "Orphan No #{orphan}"
+        CLUSTERS["orphan_#{orphan}"] = { name: "Orphan No #{orphan}", id: nil, count: 0 }
         break;
       end
     end
@@ -148,12 +148,14 @@ puts <<END
 END
 
 id = 0
-CLUSTERS.each_pair do |cluster, clname|
+CLUSTERS.each_pair do |cluster, cldata|
   id += 1
+  cldata[:id] = id
   #puts "subgraph cluster#{cluster} {"
   BLOGS.each_pair do |blog, data|
     if data[:cluster] == cluster
       puts "#{blog} [ label = \"#{data[:name]}\"; cluster = #{id} ];"
+      cldata[:count] += 1
     end
   end
 
@@ -173,13 +175,20 @@ CLUSTERS.each_pair do |cluster, clname|
     end
   end
 
-  #puts " label = \"#{clname}\""
+  #puts " label = \"#{cldata[:name]}\""
   #puts "}"
 end
 
-#BLOGS.each_pair do |blog, data|
-#  puts "#{blog} [ label = \"#{data[:name]}\" ];"
-#end
-
+# BLOGS.each_pair do |blog, data|
+#   puts "#{blog} [ label = \"#{data[:name]}\" ];"
+# end
 
 puts "}"
+
+STDERR.puts "Cluster statistics:"
+total = 0
+CLUSTERS.values.sort_by{|d| d[:count]}.each do |d|
+  STDERR.puts "%d / %0.2f%%: %s]" % [d[:count], d[:count].to_f / BLOGS.keys.count.to_f * 100, d[:name]]
+
+  total += d[:count]
+end
