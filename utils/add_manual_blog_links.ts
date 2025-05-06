@@ -1,14 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
-import Database from '../database.js';
-import Utils from '../utils.js';
+import Utils from "../lib/utils.js";
 
 async function run() {
-  const db = Database('postgres://postgres:root@localhost:5432/tumblr', {
-  });
-  await db.sequelize.sync();
-  console.log("Database connected");
-  let utils = new Utils(db);
+  const utils = new Utils();
 
   // await utils.mergeBlogs('deadmanride','dukeofedinburgh');
   // await utils.mergeBlogs('spamdog','nomorespamdog');
@@ -203,6 +199,6 @@ async function run() {
   //   console.log(`Setting latest name for ${blog.name}`);
   //   await utils.assignLatestBlogName(blog.id);
   // }
-};
+}
 
 run();

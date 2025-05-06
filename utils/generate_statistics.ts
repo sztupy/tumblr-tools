@@ -1,17 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
-import Database from '../database.js';
-import Utils from '../utils.js';
+import Utils from "../lib/utils.js";
 
 async function run() {
-  //const db = Database('sqlite:db.sqlite');
-  const db = Database('postgres://localhost:5432/tumblr', {
-  //  skipProcessingIndices: true
-  });
-  await db.sequelize.sync();
-  console.log("Database connected");
-  let utils = new Utils(db);
-  let spans = await utils.getSpans();
+  const utils = new Utils();
+  const spans = await utils.getSpans();
 
   // for (const spanName in spans) {
   //   let span = spans[spanName];
@@ -41,6 +35,6 @@ async function run() {
   //     console.log(spanName+" "+result['count']);
   //   }
   // }
-};
+}
 
 run();
