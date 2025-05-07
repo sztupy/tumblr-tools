@@ -18,7 +18,7 @@ Once your app is created make note of the "OAuth Consumer Key" and "Secret key" 
 
 Next copy over `environment.ts.example` to `environment.ts`. Edit the `tumblrKeys` section it so it looks like the following:
 
-```json
+```js
 {
   tumblrKeys: [
     {
@@ -49,7 +49,7 @@ You will get a URL that you will need to open in the same browser you are logged
 
 After successful login you will get all of the required details on the console. Replace the `tumblrKeys` value in your `environment.ts` with the new settings:
 
-```json
+```js
 {
   tumblrKeys: [
     { "consumer_key": "abcd", "consumer_secret": "efgh", "token": "iklm", "token_secret": "nopq" },
@@ -117,7 +117,7 @@ CREATE DATABASE tumblr;
 
 Then edit your config in `environment.ts`:
 
-```json
+```js
 {
   databaseConnectionString: "postgres://<username>:<password>@<host>:<port>/<database_name>"
 }
@@ -125,7 +125,7 @@ Then edit your config in `environment.ts`:
 
 Example:
 
-```json
+```js
 {
   databaseConnectionString: "postgres://postgres:root@localhost:5432/tumblr"
 }
