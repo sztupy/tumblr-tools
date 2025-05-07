@@ -145,14 +145,16 @@ async function run() {
   const processor = new Processor();
   await processor.run();
 
-  const finalizer = new Finalizer("ENGLISH");
+  const finalizer = new Finalizer({
+    createBlogs: ['<your_blog_name>']
+  });
   await finalizer.run();
 }
 
 run();
 ```
 
-Update `<backup_location>` to point to a backup file you generated earlier.
+Update `<backup_location>` to point to a backup file you generated earlier, and `<your_blog_name>` to the blog(s) you wish to mark as "relevant" in the database.
 
 Next run
 

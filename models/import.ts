@@ -5,6 +5,7 @@ import {
   DataType,
   ForeignKey,
   BelongsTo,
+  HasMany,
 } from "sequelize-typescript";
 import { Post } from "./post.js";
 import { Content } from "./content.js";
@@ -93,6 +94,7 @@ export class Import
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare languageId: number;
 
+  @ForeignKey(() => Stat)
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare statId: number;
 
@@ -122,4 +124,7 @@ export class Import
 
   @BelongsTo(() => Stat)
   declare stat: Stat;
+
+  @HasMany(() => Stat, { sourceKey: "id" })
+  declare stats?: Stat[];
 }

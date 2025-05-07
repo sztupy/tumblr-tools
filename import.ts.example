@@ -1,0 +1,24 @@
+import Processor from "./services/processor.js";
+import Finalizer from "./services/finalizer.js";
+import ZipFileImporter from "./services/zipFileImporter.js";
+
+async function run() {
+  const importer = new ZipFileImporter("tumbli-2023-11-11.zip", {
+    skipUntil: "dump/user/dump-65850.json",
+  });
+  await importer.run();
+
+  const processor = new Processor();
+  await processor.run();
+
+  const finalizer = new Finalizer({
+    autoBlogImportLanguage: 'HUNGARIAN',
+    skipBlogMerges: false,
+    createBlogs: ['staff']
+  });
+  await finalizer.run();
+
+  process.exit(0);
+}
+
+run();

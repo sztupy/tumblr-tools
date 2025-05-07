@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // imports a ZIP file containing Tumblr API dumps in JSON format into the database
-import { sequelize } from "../models/sequelize.js";
-import { Import, ImportPhase } from "../models/import.js";
-import { Blog } from "../models/blog.js";
+import { sequelize, Import, Blog, BlogName, Tag, Language } from "../models/index.js";
+import { ImportPhase } from "../models/import.js";
 import { BlogLinkType } from "../models/blog_link.js";
-import { BlogName } from "../models/blog_name.js";
-import { Tag } from "../models/tag.js";
-import { Language } from "../models/language.js";
-import Importer from "./importer.js";
+import Importer from "../lib/importer.js";
+import { apiDownloader } from "../lib/apiDownloader.js";
+import { createClient } from "../lib/tumblr.js";
+import { environment } from "../environment.js";
 
 type Options = {
   fromPage?: number;
@@ -16,7 +15,7 @@ type Options = {
 };
 
 export default class APIImporter {
-  blogName: string;
+  config: any;
   options: Options;
   cachedBlogs: Record<string, Blog>;
   cachedBlogLinks: Record<number | string, Record<number | string, BlogLinkType>>
@@ -28,8 +27,8 @@ export default class APIImporter {
   lastImport: Import | null;
   importer: Importer;
 
-  constructor(blogName?: string, options: Options = {}) {
-    this.blogName = blogName || "dashboard";
+  constructor(config: any, options: Options = {}) {
+    this.config = config;
     this.options = options;
     this.importer = options.importer || new Importer();
 
@@ -46,11 +45,13 @@ export default class APIImporter {
   }
 
   async run() {
+    const client = createClient(environment.tumblrKeys);
+
     const ctime = new Date();
 
     const importData = {
       fileDate: ctime,
-      fileName: this.blogName,
+      fileName: ''+ctime.getTime(),
       phase: ImportPhase.need_import,
     };
 
@@ -65,35 +66,28 @@ export default class APIImporter {
 
     let counter = 0;
 
-    for (const entry of Object.values(zip.entries())) {
-      if (this.options["skipUntil"]) {
-        if (entry.name.indexOf(this.options["skipUntil"]) != -1) {
-          this.start = true;
-        }
-      } else {
-        this.start = true;
-      }
-      let stats : any = {};
+    const logger = console.log;
 
-      if (this.start && entry.isFile) {
-        const startTime = Date.now();
-        console.log(`Starting ${entry.name}`);
-        counter += 1;
-        // some audio metadata contains unicode NULLs, we get rid of all of them here
-        const blog = JSON.parse(
-          zip.entryDataSync(entry).toString("utf8").replaceAll("\\u0000", ""),
-        );
+    const initScript = () => {
+      counter += 1;
+      console.log(`Starting entry`);
+    }
 
-        if (blog.blog && blog.blog.name) {
-          stats = await this.importer.run(blog, this.currentImport, this.lastImport, counter);
-        } else {
-          console.log(`Invalid file ${entry.name}`);
-        }
-        const endTime = Date.now();
+    const mainScript = async (_config: any, username: string, options: any, body: any) => {
+      // fixes some weird audio posts that have unicode NULs in them
+      const bodyFixed = JSON.parse(JSON.stringify(body).replaceAll("\\u0000",""))
+      if (this.currentImport) {
+        console.log(username);
+        console.log(options);
+        const stats = await this.importer.run(bodyFixed, this.currentImport, this.lastImport, counter);
         console.log(stats);
-        console.log(`Done with ${entry.name} in ${endTime - startTime}ms`);
+      } else {
+        console.log("Import data missing");
       }
     }
+
+    await apiDownloader(this.config, client, logger, initScript, mainScript );
+
 
     console.log("Finished import");
 

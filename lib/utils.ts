@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { sequelize } from "../models/sequelize.js";
-import Finalizer from "./finalizer.js";
+import Finalizer from "../services/finalizer.js";
 import { Blog } from "../models/blog.js";
 import { BlogName } from "../models/blog_name.js";
 import { Import } from "../models/import.js";

@@ -1,4 +1,4 @@
-import { sequelize } from "./sequelize.js";
+import { Sequelize, sequelize } from "./sequelize.js";
 import { BlogLink } from "./blog_link.js";
 import { Blog } from "./blog.js";
 import { BlogName } from "./blog_name.js";
@@ -34,3 +34,24 @@ sequelize.addModels([
   ContentLanguage,
   Stat,
 ]);
+
+export {
+  sequelize,
+  Sequelize,
+  Blog,
+  BlogName,
+  Import,
+  BlogLink,
+  Post,
+  Content,
+  BlogNamePing,
+  PostContent,
+  PostResource,
+  Resource,
+  PostTag,
+  Tag,
+  PostLanguage,
+  Language,
+  ContentLanguage,
+  Stat,
+}

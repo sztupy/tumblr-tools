@@ -26,11 +26,11 @@ export class Tag
   implements TagAttributes
 {
   @Column({ allowNull: true, type: DataType.STRING(65535) })
-  name?: string;
+  declare name: string;
 
   @BelongsToMany(() => Post, () => PostTag)
-  posts?: Post[];
+  declare posts: Post[];
 
   @HasMany(() => Import, { sourceKey: "id" })
-  imports?: Import[];
+  declare imports: Import[];
 }

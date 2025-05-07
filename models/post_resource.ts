@@ -14,7 +14,7 @@ export interface PostResourceAttributes {
   resourceId: number;
 }
 
-@Table({ tableName: "post_resources", schema: "public", timestamps: false })
+@Table({ tableName: "post_resources", modelName: "post_resources", timestamps: false, underscored: true })
 export class PostResource
   extends Model<PostResourceAttributes, PostResourceAttributes>
   implements PostResourceAttributes

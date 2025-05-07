@@ -6,5 +6,6 @@ db
 environment.ts
 dump
 blogs.dat
-dump.zip
+backup*.zip
 backup_config.yaml
+import.ts

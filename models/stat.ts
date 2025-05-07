@@ -82,6 +82,7 @@ export class Stat
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare blogId?: number;
 
+  @ForeignKey(() => Import)
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare importId?: number;
 
@@ -93,6 +94,9 @@ export class Stat
 
   @BelongsTo(() => Blog)
   declare blog?: Blog;
+
+  @BelongsTo(() => Import)
+  declare import?: Import;
 
   @HasMany(() => Import, { sourceKey: "id" })
   declare imports?: Import[];

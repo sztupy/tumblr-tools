@@ -2,7 +2,7 @@
 import { QueryTypes, Transaction } from "sequelize";
 import { sequelize } from "../models/sequelize.js";
 import { Language } from "../models/language.js";
-import Utils, { Spans } from "./utils.js";
+import Utils, { Spans } from "../lib/utils.js";
 import { Import, ImportPhase } from "../models/import.js";
 import { Blog } from "../models/blog.js";
 import { BlogName } from "../models/blog_name.js";
@@ -13,14 +13,14 @@ type Options = {
   minimumLanguagePercentage?: number;
   minimumContents?: number;
   minimumContentPercentage?: number;
-  skipBlogUpdates?: boolean;
+  autoBlogImportLanguage?: string;
   skipBlogMerges?: boolean;
+  createBlogs?: string[];
   utils?: Utils;
 };
 
 export default class Finalizer {
   targetLanguage?: Language | null;
-  targetLanguageName: string;
   minimumPercentage: number;
   minimumContents: number;
   minimumContentPercentage: number;
@@ -32,8 +32,7 @@ export default class Finalizer {
   currentImport?: Import | null;
   utils: Utils;
 
-  constructor(targetLanguage: string = "HUNGARIAN", options: Options = {}) {
-    this.targetLanguageName = targetLanguage;
+  constructor(options: Options = {}) {
     this.minimumPercentage = options["minimumLanguagePercentage"] || 10;
     this.minimumContents = options["minimumContents"] || 1000;
     this.minimumContentPercentage = options["minimumContentPercentage"] || 75;
@@ -52,9 +51,9 @@ export default class Finalizer {
 
   async initialize() {
     this.currentImport = await Import.findOne({ order: [["id", "DESC"]] });
-    if (typeof this.targetLanguage === "string") {
+    if (this.options.autoBlogImportLanguage) {
       this.targetLanguage = await Language.findOne({
-        where: { name: this.targetLanguageName },
+        where: { name: this.options.autoBlogImportLanguage },
       });
     }
   }
@@ -67,26 +66,39 @@ export default class Finalizer {
       return;
     }
 
-    if (!this.options["skipBlogUpdates"]) {
-      console.log("Obtaining blogs tied to the target language");
-      const [result] = await sequelize.query<BlogName[]>(
-        "select blog_names.name, count(contents.id)*100 total, coalesce(sum(percentage),0) hun, coalesce(sum(percentage),0)::float/count(contents.id)::float percen from blog_names join contents on blog_names.id = contents.blog_name_id left join content_languages on language_id = ? and content_id = contents.id group by blog_names.name having coalesce(sum(percentage),0) > ? and coalesce(sum(percentage),0)::float/count(contents.id)::float > ? order by percen desc;",
-        {
-          replacements: [
-            this.targetLanguage?.id,
-            this.minimumContents,
-            this.minimumPercentage,
-          ],
-          type: QueryTypes.SELECT,
-        },
-      );
-
+    if (this.options.createBlogs) {
       const transaction = await sequelize.transaction();
-      console.log("Making sure blogs exist in the database");
-      await Promise.all(
-        result.map((blog) => this.getBlog(transaction, blog.name)),
-      );
+      for (const blogName in this.options.createBlogs) {
+        await this.getBlog(transaction, blogName);
+      }
       await transaction.commit();
+    }
+
+    if (!this.options.autoBlogImportLanguage) {
+      if (!this.targetLanguage) {
+        console.log("Target language not found in system, skipping automated blog picking");
+      } else {
+        console.log("Obtaining blogs tied to the target language");
+        const [result] = await sequelize.query<BlogName[]>(
+          "select blog_names.name, count(contents.id)*100 total, coalesce(sum(percentage),0) hun, coalesce(sum(percentage),0)::float/count(contents.id)::float percen from blog_names join contents on blog_names.id = contents.blog_name_id left join content_languages on language_id = ? and content_id = contents.id group by blog_names.name having coalesce(sum(percentage),0) > ? and coalesce(sum(percentage),0)::float/count(contents.id)::float > ? order by percen desc;",
+          {
+            replacements: [
+              this.targetLanguage.id,
+              this.minimumContents,
+              this.minimumPercentage,
+            ],
+            type: QueryTypes.SELECT,
+          },
+        );
+
+
+        const transaction = await sequelize.transaction();
+        console.log("Making sure blogs exist in the database");
+        await Promise.all(
+          result.map((blog) => this.getBlog(transaction, blog.name)),
+        );
+        await transaction.commit();
+      }
     }
 
     if (!this.options["skipBlogMerges"]) {
@@ -125,10 +137,10 @@ export default class Finalizer {
                 if (destinationBlogName.blogId != blog.id) {
                   console.log(
                     "Merging blog " +
-                      destinationBlogName.name +
-                      " into " +
-                      blog.name +
-                      " with others",
+                    destinationBlogName.name +
+                    " into " +
+                    blog.name +
+                    " with others",
                   );
                   await sequelize.query(
                     "UPDATE blog_names SET blog_id = ? WHERE blog_id = ?",
@@ -141,9 +153,9 @@ export default class Finalizer {
               } else {
                 console.log(
                   "Merging blog " +
-                    destinationBlogName.name +
-                    " into " +
-                    blog.name,
+                  destinationBlogName.name +
+                  " into " +
+                  blog.name,
                 );
                 destinationBlogName.blogId = blog.id;
                 await destinationBlogName.save({ transaction: transaction });

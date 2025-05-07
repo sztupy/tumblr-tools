@@ -37,7 +37,7 @@ export class Content
   implements ContentAttributes
 {
   @Column({ allowNull: true, type: DataType.BIGINT })
-  declare tumblrId?: string;
+  declare tumblrId: string;
 
   @Column({ allowNull: true, type: DataType.STRING(64) })
   declare version: string;
@@ -61,9 +61,9 @@ export class Content
     "content_id",
     "blog_name_id",
   )
-  declare pingedBlogNames?: BlogName[];
+  declare pingedBlogNames: BlogName[];
 
-  @BelongsTo(() => PostContent)
+  @HasMany(() => PostContent, { sourceKey: "id" })
   declare postContents: PostContent[];
 
   @BelongsToMany(() => Post, () => PostContent)
@@ -73,5 +73,5 @@ export class Content
   declare languages: Language[];
 
   @HasMany(() => Import, { sourceKey: "id" })
-  declare imports?: Import[];
+  declare imports: Import[];
 }

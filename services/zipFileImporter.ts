@@ -1,15 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // imports a ZIP file containing Tumblr API dumps in JSON format into the database
-import { sequelize } from "../models/sequelize.js";
+import { sequelize, Import, Blog, BlogName, Tag, Language } from "../models/index.js";
 import fs from "fs";
 import Zip from "node-stream-zip";
-import { Import, ImportPhase } from "../models/import.js";
-import { Blog } from "../models/blog.js";
+import { ImportPhase } from "../models/import.js";
 import { BlogLinkType } from "../models/blog_link.js";
-import { BlogName } from "../models/blog_name.js";
-import { Tag } from "../models/tag.js";
-import { Language } from "../models/language.js";
-import Importer from "./importer.js";
+import Importer from "../lib/importer.js";
 
 type Options = {
   skipUntil?: string;

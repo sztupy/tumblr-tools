@@ -5,6 +5,7 @@ import {
   DataType,
   ForeignKey,
   HasMany,
+  BelongsTo,
 } from "sequelize-typescript";
 import { Import } from "./import.js";
 import { BlogName } from "./blog_name.js";
@@ -35,6 +36,15 @@ export class BlogLink
   implements BlogLinkAttributes
 {
   @Column({
+    type: DataType.INTEGER,
+    field: "id",
+    allowNull: false,
+    autoIncrement: true,
+    primaryKey: true,
+  })
+  declare id: number;
+
+  @Column({
     allowNull: true,
     type: DataType.ENUM(...Object.values(BlogLinkType)),
   })
@@ -44,6 +54,7 @@ export class BlogLink
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare destinationId: number;
 
+  @ForeignKey(() => Import)
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare importId: number;
 
@@ -56,4 +67,10 @@ export class BlogLink
 
   @HasMany(() => Import, { sourceKey: "id" })
   declare imports: Import[];
+
+  @BelongsTo(() => BlogName)
+  declare destination: BlogName;
+
+  @BelongsTo(() => BlogName)
+  declare source: BlogName;
 }
