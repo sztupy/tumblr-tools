@@ -112,12 +112,15 @@ try {
         fs.mkdirSync(__dirname + "/dump/" + username);
       }
       console.log("START %s", username);
-      const options = {
+      const options: Record<string, any> = {
         limit: 50,
         offset: getConfig(username, 'offset', 0),
         reblog_info: true,
-        type: 'audio'
       }
+      if (getConfig(username, 'type', null)) {
+        options.type = getConfig(username, 'type', null)
+      }
+
       while (true) {
         const [body,] = username == 'dashboard' ? await client.userDashboardAsync(options) : await client.blogPostsAsync(username, options);
         const promises: Promise<any>[] = [];

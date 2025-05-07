@@ -161,3 +161,40 @@ npm exec tsx import.ts
 ```
 
 This will import the dump into the database, run some analytics on it, and specifically highlight blogs that are done in the target language (`ENGLISH` in this example)
+
+## Notes
+
+### Import steps
+
+The database import has the following steps:
+
+* `Importer`: This will load up JSON files either from a ZIP or the API and insert the data to the database
+* `Processor`: This will check the uploaded content and finds language information in the posts present. It will also find all of the pings between blogs
+* `Finalizer`: Runs statistics on the uploaded data. Will determine "relevant" blogs based on the pre-set languge qualifier. Will also handle merging of blogs where the blog's name was changed in the past.
+
+### Database structure
+
+The main structure of the database is the following:
+
+* `Blog`: this contains the list of blogs that are deemed "relevant". Unless created manually, the `Finalizer` will fill in this list based on the pre-set language settings, and mark any blog that posts in the marked language as "relevant". Each `Blog` can have multiple `BlogNames` which describes all of the blog renames that the dump has found.
+* `BlogName`: this contains all of the blog names that appear in the import dump. Names are kept as-is during the import.
+* `Post`: this contains a specific post in the system - either an original post, or a reblog.
+* `Content`: this contains the textual representation of either the main post or any of the reblog trail contents. To save space in the database `Content` objects are re-used between posts whenever the text is the exaxt same. `Posts` and `Contents` are linked using the `PostContent` join table which also includes which reblog a specific content is on the post to.
+
+Note that any links to tumblr's image server are shortened to `t:` to save space.
+
+In order to reconstruct a specific post from the database you would need to:
+
+1. Obtain the post, for example by it's `tumblr_id`. The post will contains the `title` and some metadata which is usually relevant for non-text posts (like `audio_src` for `audio` posts)
+
+2. Consult the `post_contents` table for the entire reblog thread. Make sure to order this by the `position` field in order
+
+3. Get each of the `contents` object in order. This will contain the textual part of the entire reblog trail
+
+4. Convert each of the links, and replace `t:` with `https://64.media.tumblr.com`
+
+You now have the post reconstructed
+
+### Limitations
+
+The database currently cannot properly handle cases where a blog was renamed then the old name was re-registered by someone else, and might believe the two blogs are the same.
