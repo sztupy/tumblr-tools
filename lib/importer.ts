@@ -1,12 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // imports a ZIP file containing Tumblr API dumps in JSON format into the database
 import { sequelize } from "../models/sequelize.js";
-import fs from "fs";
 import lodash from "lodash";
-import Zip from "node-stream-zip";
 import Sequelize, { Transaction } from "sequelize";
 import crypto from "crypto";
-import { Import, ImportPhase } from "../models/import.js";
+import { Import } from "../models/import.js";
 import { Blog } from "../models/blog.js";
 import { BlogLinkType } from "../models/blog_link.js";
 import { BlogName } from "../models/blog_name.js";
@@ -42,175 +40,89 @@ function clearEmpties(o: any) {
   return o;
 }
 
-type Options = {
-  skipUntil?: string;
-};
-
 export default class Importer {
-  fileName: string;
-  options: Options;
-  cachedBlogs: { [key: string]: Blog };
-  cachedBlogLinks: {
-    [key: number | string]: { [key: number | string]: BlogLinkType };
-  };
-  cachedBlogNames: { [key: string]: BlogName };
-  cachedTags: { [key: string]: Tag };
-  cachedLanguages: { [key: string]: Language };
-  stats: any;
-  start: boolean;
-  currentImport: Import | null;
-  lastImport: Import | null;
+  cachedBlogs: Record<string, Blog>;
+  cachedBlogLinks: Record<number | string, Record<number | string, BlogLinkType>>
+  cachedBlogNames: Record<string, BlogName>;
+  cachedTags: Record<string, Tag>;
+  cachedLanguages: Record<string, Language>;
 
-  constructor(fileName: string, options: Options = {}) {
-    this.fileName = fileName;
-    this.options = options;
-
+  constructor() {
     this.cachedBlogs = {};
     this.cachedBlogLinks = {};
     this.cachedBlogNames = {};
     this.cachedTags = {};
     this.cachedLanguages = {};
-
-    this.stats = {};
-
-    this.start = false;
-
-    this.currentImport = null;
-    this.lastImport = null;
   }
 
-  async run() {
-    const { ctime } = fs.statSync(this.fileName);
-    const zip = new Zip({ file: this.fileName });
+  async run(blog: any, currentImport: Import, lastImport: Import | null, counter: number) {
+    const stats: any = {};
 
-    zip.on("ready", async () => {
-      const importData = {
-        fileDate: ctime,
-        fileName: this.fileName,
-        phase: ImportPhase.need_import,
-      };
+    if (counter % 100 == 0) {
+      this.cachedBlogs = {};
+      this.cachedBlogLinks = {};
+      this.cachedBlogNames = {};
+      this.cachedTags = {};
+      this.cachedLanguages = {};
+      counter = 0;
+      console.log("Clearing cache");
+    }
 
-      [this.currentImport] = await Import.findCreateFind({
-        where: {
-          fileDate: ctime,
-        },
-        defaults: importData,
-      });
+    const transaction = await sequelize.transaction();
 
-      this.lastImport = await Import.findByPk(this.currentImport.id - 1);
+    const userName = blog.blog?.name;
+    const databaseBlogName = userName ? await this.getBlogName(
+      transaction,
+      userName,
+    ) : null;
 
-      let counter = 0;
+    stats["new_posts"] = 0;
+    stats["new_content"] = 0;
+    stats["dup_content"] = 0;
 
-      for (const entry of Object.values(zip.entries())) {
-        if (this.options["skipUntil"]) {
-          if (entry.name.indexOf(this.options["skipUntil"]) != -1) {
-            this.start = true;
-          }
-        } else {
-          this.start = true;
-        }
-        if (this.start && entry.isFile) {
-          const startTime = Date.now();
-          console.log(`Starting ${entry.name}`);
-          counter += 1;
-          if (counter % 100 == 0) {
-            this.cachedBlogs = {};
-            this.cachedBlogLinks = {};
-            this.cachedBlogNames = {};
-            this.cachedTags = {};
-            this.cachedLanguages = {};
-            counter = 0;
-            console.log("Clearing cache");
-          }
-          // some audio metadata contains unicode NULLs, we get rid of all of them here
-          const blog = JSON.parse(
-            zip.entryDataSync(entry).toString("utf8").replaceAll("\\u0000", ""),
-          );
+    for (const post of blog.posts) {
+      await this.importPost(
+        transaction,
+        post,
+        userName,
+        databaseBlogName,
+        currentImport,
+        lastImport,
+        stats
+      );
+    }
 
-          if (blog.blog && blog.blog.name) {
-            const transaction = await sequelize.transaction();
+    await transaction.commit();
 
-            const userName = blog.blog.name;
-            const databaseBlogName = await this.getBlogName(
-              transaction,
-              userName,
-            );
 
-            this.stats["new_posts"] = 0;
-            this.stats["new_content"] = 0;
-            this.stats["dup_content"] = 0;
-
-            for (const post of blog.posts) {
-              await this.importPost(
-                transaction,
-                post,
-                userName,
-                databaseBlogName,
-              );
-            }
-
-            await transaction.commit();
-          } else {
-            console.log(`Invalid file ${entry.name}`);
-          }
-          const endTime = Date.now();
-          console.log(this.stats);
-          console.log(`Done with ${entry.name} in ${endTime - startTime}ms`);
-        }
-      }
-
-      console.log("Finished import");
-
-      this.currentImport.postId = (
-        (await sequelize.query("SELECT MAX(id) as id from posts;")) as any
-      )[0][0]["id"];
-      this.currentImport.contentId = (
-        (await sequelize.query("SELECT MAX(id) as id from contents;")) as any
-      )[0][0]["id"];
-      this.currentImport.tagId = (
-        (await sequelize.query("SELECT MAX(id) as id from tags;")) as any
-      )[0][0]["id"];
-      this.currentImport.resourceId = (
-        (await sequelize.query("SELECT MAX(id) as id from resources;")) as any
-      )[0][0]["id"];
-      this.currentImport.blogNameId = (
-        (await sequelize.query("SELECT MAX(id) as id from blog_names;")) as any
-      )[0][0]["id"];
-      this.currentImport.blogId = (
-        (await sequelize.query("SELECT MAX(id) as id from blogs;")) as any
-      )[0][0]["id"];
-      this.currentImport.blogLinkId = (
-        (await sequelize.query("SELECT MAX(id) as id from blog_links;")) as any
-      )[0][0]["id"];
-      this.currentImport.languageId = (
-        (await sequelize.query("SELECT MAX(id) as id from languages;")) as any
-      )[0][0]["id"];
-      this.currentImport.phase = ImportPhase.import_finished;
-      this.currentImport.save();
-
-      console.log(this.currentImport);
-      zip.close();
-    });
+    return stats;
   }
 
   async importPost(
     transaction: Transaction,
     post: any,
     userName: string,
-    databaseBlogName: BlogName,
+    databaseBlogName: BlogName | null,
+    currentImport: Import,
+    lastImport: Import | null,
+    stats: any
   ) {
     let databasePost = await Post.findOne({
       where: { tumblrId: post.id },
       transaction: transaction,
     });
 
+    if (!databaseBlogName) {
+      databaseBlogName = await this.getBlogName(transaction, post.blog.name);
+    }
+
     // only handle the post if either we haven't saved it, or we saved it in an eariler import and hence we might have to revisit its details
     if (
       !databasePost ||
-      (this.lastImport &&
-        databasePost.id <= this.lastImport.postId &&
+      (lastImport &&
+        databasePost.id <= lastImport.postId &&
         (!databasePost.meta["archive"] ||
-          !databasePost.meta["archive"][this.lastImport.id]))
+          !databasePost.meta["archive"][lastImport.id]))
     ) {
       const meta: any = {};
 
@@ -246,6 +158,10 @@ export default class Importer {
 
       if (post["is_submission"]) {
         meta["is_submission"] = true;
+      }
+
+      if (post["interactability_reblog"] && post["interactability_reblog"] != 'everyone') {
+        meta["interactability_reblog"] = post["interactability_reblog"]
       }
 
       let probableRootName = meta["reblogged_root_name"];
@@ -379,7 +295,7 @@ export default class Importer {
       };
 
       if (!databasePost) {
-        this.stats["new_posts"] += 1;
+        stats["new_posts"] += 1;
         databasePost = await Post.create(data, {
           transaction: transaction,
         });
@@ -399,6 +315,7 @@ export default class Importer {
             databasePost.blogNameId,
             BlogLinkType.rename,
             { post_id: databasePost.id, type: "main" },
+            currentImport
           );
         }
 
@@ -409,6 +326,7 @@ export default class Importer {
             databasePost.fromBlogNameId,
             BlogLinkType.rename,
             { post_id: databasePost.id, type: "from" },
+            currentImport
           );
         }
 
@@ -719,7 +637,7 @@ export default class Importer {
 
         if (!lodash.isEmpty(newArchive)) {
           databasePost.meta["archive"] ||= {};
-          databasePost.meta["archive"][this.lastImport?.id] = newArchive;
+          databasePost.meta["archive"][lastImport?.id] = newArchive;
 
           databasePost.meta = this.sanitizeImageUrls(
             clearEmpties(databasePost.meta),
@@ -741,6 +659,7 @@ export default class Importer {
           userName,
           BlogLinkType.author,
           { post_id: databasePost.id },
+          currentImport
         );
       }
 
@@ -753,6 +672,8 @@ export default class Importer {
           databasePost,
           -1,
           false,
+          currentImport,
+          stats
         );
       }
 
@@ -782,7 +703,7 @@ export default class Importer {
     await this.importPhotos(transaction, post, databasePost);
 
     // this is where we look at the reblog trail and save all trail elements separately. We can use these separate elements to reconstruct dead/deactivated or non-imported blogs to an extent
-    await this.importContent(transaction, post, databasePost, userName);
+    await this.importContent(transaction, post, databasePost, userName, currentImport, stats);
   }
 
   async importContent(
@@ -790,6 +711,8 @@ export default class Importer {
     post: any,
     databasePost: Post,
     userName: string,
+    currentImport: Import,
+    stats: any
   ) {
     if (post.trail) {
       for (let position = 0; position < post.trail.length; position++) {
@@ -822,6 +745,8 @@ export default class Importer {
           databasePost,
           position,
           last,
+          currentImport,
+          stats
         );
       }
     }
@@ -833,6 +758,8 @@ export default class Importer {
     databasePost: Post,
     position: number,
     last: boolean,
+    currentImport: Import,
+    stats: any
   ) {
     let contentId = (await sequelize.query(
       "INSERT INTO contents (tumblr_id,version,text,blog_name_id) VALUES (?,?,?,?) ON CONFLICT DO NOTHING RETURNING id;",
@@ -844,7 +771,7 @@ export default class Importer {
     )) as any;
 
     if (contentId && contentId[0] && contentId[0][0] && contentId[0][0]["id"]) {
-      this.stats["new_content"] += 1;
+      stats["new_content"] += 1;
       contentId = contentId[0][0]["id"];
     } else {
       const content = await Content.findOne({
@@ -853,7 +780,7 @@ export default class Importer {
       });
       if (content) {
         contentId = content.id;
-        this.stats["dup_content"] += 1;
+        stats["dup_content"] += 1;
         if (!content.blogNameId && data[3]) {
           content.blogNameId = data[3];
           await content.save({ transaction: transaction });
@@ -865,6 +792,7 @@ export default class Importer {
               content.blogNameId,
               BlogLinkType.rename,
               { content_id: contentId },
+              currentImport
             );
           }
         }
@@ -941,6 +869,7 @@ export default class Importer {
     blogName2: number | string | undefined,
     type: BlogLinkType,
     data: any,
+    currentImport: Import
   ) {
     if (blogName1 == blogName2) return;
 
@@ -962,7 +891,7 @@ export default class Importer {
         replacements: [
           blog1.id,
           blog2.id,
-          this.currentImport?.id,
+          currentImport.id,
           type,
           JSON.stringify(data),
         ],

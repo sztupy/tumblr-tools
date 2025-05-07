@@ -25,9 +25,9 @@ export default class Finalizer {
   minimumContents: number;
   minimumContentPercentage: number;
   options: Options;
-  cachedBlogs: { [key: string]: Blog };
-  cachedBlogNames: { [key: string]: BlogName };
-  cachedLanguages: { [key: string]: Language };
+  cachedBlogs: Record<string, Blog>;
+  cachedBlogNames: Record<string, BlogName>;
+  cachedLanguages: Record<string, Language>;
   stats: object;
   currentImport?: Import | null;
   utils: Utils;

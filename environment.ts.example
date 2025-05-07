@@ -1,0 +1,14 @@
+export const environment = {
+  loginRootUrl: "http://localhost:3000",
+  logSql: false,
+  databaseConnectionString: "postgres://postgres:root@localhost:5432/tumblr",
+  tumblrKeys: [
+    {
+      consumer_key: 'CONSUMER_KEY',
+      consumer_secret: 'CONSUMER_SECRET',
+      token: 'TOKEN',
+      token_secret: 'TOKEN_SECRET',
+    },
+    // can include multiple if needed
+  ]
+};

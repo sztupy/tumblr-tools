@@ -12,8 +12,8 @@ import { BlogName } from "../models/blog_name.js";
 
 export default class Processor {
   options: object;
-  cachedBlogNames: { [key: string]: BlogName };
-  cachedLanguages: { [key: string]: Language };
+  cachedBlogNames: Record<string, BlogName>;
+  cachedLanguages: Record<string, Language>;
   stats: object;
   currentImport: Import | null;
 

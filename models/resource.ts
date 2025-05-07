@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Model,
   Table,
@@ -16,7 +17,7 @@ export interface ResourceAttributes {
   url?: string;
   localUrl?: string;
   external?: boolean;
-  meta?: object;
+  meta?: Record<string, any>;
 }
 
 @Table({
@@ -42,7 +43,7 @@ export class Resource
   declare external: boolean;
 
   @Column({ allowNull: true, type: DataType.JSONB })
-  declare meta: object;
+  declare meta: Record<string, any>;
 
   @BelongsToMany(() => Post, () => PostResource)
   declare posts: Post[];

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Model,
   Table,
@@ -26,7 +27,7 @@ export interface PostAttributes {
   tumblrId?: string;
   title?: string;
   type?: PostType;
-  meta?: object;
+  meta?: Record<string, any>;
   date?: Date;
   url?: string;
   root?: boolean;
@@ -69,7 +70,7 @@ export class Post
   declare type: PostType;
 
   @Column({ allowNull: true, type: DataType.JSONB })
-  declare meta: object;
+  declare meta: Record<string, any>;
 
   @Column({ allowNull: true, type: DataType.DATE })
   declare date: Date;

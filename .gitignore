@@ -1,4 +1,9 @@
 node_modules
 out
+built
 db
 *.log
+environment.ts
+dump
+blogs.dat
+dump.zip
