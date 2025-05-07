@@ -19,12 +19,14 @@ Once your app is created make note of the "OAuth Consumer Key" and "Secret key" 
 Next copy over `environment.ts.example` to `environment.ts`. Edit the `tumblrKeys` section it so it looks like the following:
 
 ```json
+{
   tumblrKeys: [
     {
       consumer_key: 'CONSUMER_KEY',
       consumer_secret: 'CONSUMER_SECRET',
     },
   ]
+}
 ```
 
 Make sure to add your own `CONSUMER_KEY` and `CONSUMER_SECRET` values.
@@ -48,9 +50,11 @@ You will get a URL that you will need to open in the same browser you are logged
 After successful login you will get all of the required details on the console. Replace the `tumblrKeys` value in your `environment.ts` with the new settings:
 
 ```json
-tumblrKeys: [
-  { "consumer_key": "abcd", "consumer_secret": "efgh", "token": "iklm", "token_secret": "nopq" },
-]
+{
+  tumblrKeys: [
+    { "consumer_key": "abcd", "consumer_secret": "efgh", "token": "iklm", "token_secret": "nopq" },
+  ]
+}
 ```
 
 ## Backup to file
@@ -114,13 +118,17 @@ CREATE DATABASE tumblr;
 Then edit your config in `environment.ts`:
 
 ```json
-databaseConnectionString: "postgres://<username>:<password>@<host>:<port>/<database_name>",
+{
+  databaseConnectionString: "postgres://<username>:<password>@<host>:<port>/<database_name>"
+}
 ```
 
 Example:
 
 ```json
-databaseConnectionString: "postgres://postgres:root@localhost:5432/tumblr"
+{
+  databaseConnectionString: "postgres://postgres:root@localhost:5432/tumblr"
+}
 ```
 
 Next run the migrations:
@@ -129,7 +137,7 @@ Next run the migrations:
 npm run db:migrate
 ```
 
-### Backup
+### Import
 
 Create a new importer file `import.ts` with the following contents:
 
@@ -154,7 +162,9 @@ async function run() {
 run();
 ```
 
-Update `<backup_location>` to point to a backup file you generated earlier, and `<your_blog_name>` to the blog(s) you wish to mark as "relevant" in the database.
+Update `<backup_location>` to point to a backup file you generated earlier, and `<your_blog_name>` to the blog(s) you wish to mark as "relevant" in the database. Generally these should be your main and side blogs.
+
+> **Note:: you can also check the `import.ts.example` file for more options
 
 Next run
 
@@ -162,7 +172,7 @@ Next run
 npm exec tsx import.ts
 ```
 
-This will import the dump into the database, run some analytics on it, and specifically highlight blogs that are done in the target language (`ENGLISH` in this example)
+This will import the dump into the database, run some analytics on it.
 
 ## Notes
 
@@ -172,16 +182,16 @@ The database import has the following steps:
 
 * `Importer`: This will load up JSON files either from a ZIP or the API and insert the data to the database
 * `Processor`: This will check the uploaded content and finds language information in the posts present. It will also find all of the pings between blogs
-* `Finalizer`: Runs statistics on the uploaded data. Will determine "relevant" blogs based on the pre-set languge qualifier. Will also handle merging of blogs where the blog's name was changed in the past.
+* `Finalizer`: Runs statistics on the uploaded data. Will determine "relevant" blogs based on the pre-set languge qualifier if needed. Will also handle merging of blogs where the blog's name was changed in the past.
 
 ### Database structure
 
 The main structure of the database is the following:
 
-* `Blog`: this contains the list of blogs that are deemed "relevant". Unless created manually, the `Finalizer` will fill in this list based on the pre-set language settings, and mark any blog that posts in the marked language as "relevant". Each `Blog` can have multiple `BlogNames` which describes all of the blog renames that the dump has found.
+* `Blog`: this contains the list of blogs that are deemed "relevant". Unless created manually, the `Finalizer` will fill in this list based on the pre-set language settings, and mark any blog that posts in the marked language as "relevant". Each `Blog` can have multiple `BlogNames` which describes all of the blog renames that the dump has found during it's processing.
 * `BlogName`: this contains all of the blog names that appear in the import dump. Names are kept as-is during the import.
 * `Post`: this contains a specific post in the system - either an original post, or a reblog.
-* `Content`: this contains the textual representation of either the main post or any of the reblog trail contents. To save space in the database `Content` objects are re-used between posts whenever the text is the exaxt same. `Posts` and `Contents` are linked using the `PostContent` join table which also includes which reblog a specific content is on the post to.
+* `Content`: this contains the textual representation of either the main post or any of the reblog trail's contents. To save space in the database `Content` objects are re-used between posts whenever the text is the exaxt same. `Posts` and `Contents` are linked using the `PostContent` join table which also includes which reblog a specific content is on the post to.
 
 Note that any links to tumblr's image server are shortened to `t:` to save space.
 
@@ -193,10 +203,14 @@ In order to reconstruct a specific post from the database you would need to:
 
 3. Get each of the `contents` object in order. This will contain the textual part of the entire reblog trail
 
-4. Convert each of the links, and replace `t:` with `https://64.media.tumblr.com`
+4. Convert each of the links, and replace `t:` with `https://64.media.tumblr.com/`
 
 You now have the post reconstructed
 
 ### Limitations
 
-The database currently cannot properly handle cases where a blog was renamed then the old name was re-registered by someone else, and might believe the two blogs are the same.
+The database currently cannot properly handle cases where a blog that is marked "relevant" was renamed, and then the old name was re-registered by someone else, and might believe the two blogs are one and the same.
+
+## License
+
+Licensed under the AGPLv3

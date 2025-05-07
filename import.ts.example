@@ -3,17 +3,28 @@ import Finalizer from "./services/finalizer.js";
 import ZipFileImporter from "./services/zipFileImporter.js";
 
 async function run() {
-  const importer = new ZipFileImporter("tumbli-2023-11-11.zip", {
-    skipUntil: "dump/user/dump-65850.json",
+  const importer = new ZipFileImporter("backup-1234.zip", {
+  // if the import crashed or you had to stop it, you can mark which file to continue with
+  // skipUntil: "dump/user/dump-65850.json",
   });
+
+  // Alternatively you can backup and import in one go, although this is only recommended for very few API calls
+  // like keeping your dashboard data updated in the database.
+  //const importer = new APIImporter(config);
   await importer.run();
 
   const processor = new Processor();
   await processor.run();
 
   const finalizer = new Finalizer({
+    // mark blogs in the target language as "relevant"
     autoBlogImportLanguage: 'HUNGARIAN',
+    // check the options in the finalizer on who to fine-tune this autodetection
+
+    // don't skip trying to figure out blog merges and renames from the dataset
     skipBlogMerges: false,
+
+    // mark the following blogs as "relevant" explicitly. You probably want to include your main an sideblogs here
     createBlogs: ['staff']
   });
   await finalizer.run();

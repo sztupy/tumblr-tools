@@ -3,9 +3,10 @@ out
 built
 db
 *.log
-environment.ts
+
 dump
-blogs.dat
 backup*.zip
+
 backup_config.yaml
+environment.ts
 import.ts
