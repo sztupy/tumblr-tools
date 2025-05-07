@@ -1,0 +1,13 @@
+concurrency: 10
+defaults:
+  dump_media: true
+  dump_all_media: false
+users:
+  dashboard:
+    max_offset: 500
+    dump_media: false
+  staff:
+  fandom:
+    offset: 100
+    max_offset: 200
+    dump_all_media: true
