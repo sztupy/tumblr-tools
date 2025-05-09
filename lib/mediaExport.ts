@@ -43,9 +43,17 @@ async function downloadImage(config: any, url: string, blogName: string, postBlo
         name = name + fragments.pop()
 
       name = name.replaceAll(/[^a-zA-Z0-9._-]/g, '_')
+
+      if (name.length > 250) {
+        name = name.substring(0, 125) + name.substring(name.length - 125, name.length)
+      }
+
       path = getConfig(config, blogName, 'media_export_dir', `${__dirname}/../dump/tumblr_files`) + '/' + name;
     } else {
       name = url.replaceAll(/[^a-zA-Z0-9._-]/g, '_')
+      if (name.length > 250) {
+        name = name.substring(0, 125) + name.substring(name.length - 125, name.length)
+      }
       path = getConfig(config, blogName, 'external_media_export_dir', `${__dirname}/../dump/tumblr_files/external`) + '/' + name;
     }
 
@@ -95,7 +103,7 @@ export async function downloadImagesFromBodyData(config: any, body: any, usernam
   const promises: Promise<any>[] = [];
 
   for (const post of body.posts) {
-    const first_trail = post.trail[0]
+    const first_trail = post.trail && (post.trail[0])
     const trail_user = first_trail?.blog.name
     const poster_user = post['reblogged_root_name'] || trail_user || post['blog_name']
 
@@ -131,19 +139,21 @@ export async function downloadImagesFromBodyData(config: any, body: any, usernam
         promises.push(fetchPhotos(config, post, username));
     }
 
-    for (const trail of post.trail) {
-      const content = trail.content_raw.replaceAll('[[MORE]]', '<!-- [[MORE]] -->')
-      try {
-        const dom = new JSDOM(content);
-        for (const el of dom.window.document.getElementsByTagName('img')) {
-          const source = el.getAttribute('src')
-          if (source) {
-            promises.push(downloadImage(config, source, username, post.blog.name));
+    if (post.trail) {
+      for (const trail of post.trail) {
+        const content = trail.content_raw.replaceAll('[[MORE]]', '<!-- [[MORE]] -->')
+        try {
+          const dom = new JSDOM(content);
+          for (const el of dom.window.document.getElementsByTagName('img')) {
+            const source = el.getAttribute('src')
+            if (source) {
+              promises.push(downloadImage(config, source, username, post.blog.name));
+            }
           }
+        } catch (error) {
+          console.log("Could not download image");
+          console.log(error);
         }
-      } catch (error) {
-        console.log("Could not download image");
-        console.log(error);
       }
     }
   }

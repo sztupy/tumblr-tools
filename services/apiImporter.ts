@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// imports a ZIP file containing Tumblr API dumps in JSON format into the database
+// imports a blog through from the Tumblr API to the database
 import { sequelize, Import, Blog, BlogName, Tag, Language } from "../models/index.js";
 import { ImportPhase } from "../models/import.js";
 import { BlogLinkType } from "../models/blog_link.js";

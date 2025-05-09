@@ -20,7 +20,7 @@ import { PostTag } from "./post_tag.js";
 import { Language } from "./language.js";
 import { PostLanguage } from "./post_language.js";
 import { Import } from "./import.js";
-import { BelongsToManyGetAssociationsMixin } from "sequelize";
+import { BelongsToGetAssociationMixin, BelongsToManyGetAssociationsMixin } from "sequelize";
 
 export interface PostAttributes {
   id?: number;
@@ -34,6 +34,7 @@ export interface PostAttributes {
   rootTumblrId?: string;
   fromTumblrId?: string;
   processed?: boolean;
+  exported?: boolean;
   blogNameId?: number;
   fromBlogNameId?: number;
   rootBlogNameId?: number;
@@ -90,18 +91,32 @@ export class Post
   @Column({ type: DataType.BOOLEAN, defaultValue: Sequelize.literal("false") })
   declare processed: boolean;
 
+  @Column({ type: DataType.BOOLEAN, defaultValue: Sequelize.literal("false") })
+  declare exported: boolean;
+
   @ForeignKey(() => BlogName)
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare blogNameId?: number;
 
+  @ForeignKey(() => BlogName)
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare fromBlogNameId?: number;
 
+  @ForeignKey(() => BlogName)
   @Column({ allowNull: true, type: DataType.INTEGER })
   declare rootBlogNameId?: number;
 
   @BelongsTo(() => BlogName)
   declare blogName: BlogName;
+  declare getBlogName: BelongsToGetAssociationMixin<BlogName>;
+
+  @BelongsTo(() => BlogName)
+  declare fromBlogName: BlogName;
+  declare getFromBlogName: BelongsToGetAssociationMixin<BlogName>;
+
+  @BelongsTo(() => BlogName)
+  declare rootBlogName: BlogName;
+  declare getRootBlogName: BelongsToGetAssociationMixin<BlogName>;
 
   @HasMany(() => PostContent)
   declare postContents: PostContent[];

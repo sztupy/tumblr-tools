@@ -74,12 +74,12 @@ export default class Finalizer {
       await transaction.commit();
     }
 
-    if (!this.options.autoBlogImportLanguage) {
+    if (this.options.autoBlogImportLanguage) {
       if (!this.targetLanguage) {
         console.log("Target language not found in system, skipping automated blog picking");
       } else {
         console.log("Obtaining blogs tied to the target language");
-        const [result] = await sequelize.query<BlogName[]>(
+        const result = await sequelize.query<BlogName>(
           "select blog_names.name, count(contents.id)*100 total, coalesce(sum(percentage),0) hun, coalesce(sum(percentage),0)::float/count(contents.id)::float percen from blog_names join contents on blog_names.id = contents.blog_name_id left join content_languages on language_id = ? and content_id = contents.id group by blog_names.name having coalesce(sum(percentage),0) > ? and coalesce(sum(percentage),0)::float/count(contents.id)::float > ? order by percen desc;",
           {
             replacements: [

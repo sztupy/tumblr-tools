@@ -51,4 +51,6 @@ archive.pipe(output);
 
 archive.directory(getConfig(config, 'default', 'export_dir_root', __dirname + "/dump"), 'dump');
 
-archive.finalize();
+await archive.finalize();
+
+process.exit(0);
