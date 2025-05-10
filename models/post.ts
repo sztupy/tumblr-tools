@@ -110,11 +110,11 @@ export class Post
   declare blogName: BlogName;
   declare getBlogName: BelongsToGetAssociationMixin<BlogName>;
 
-  @BelongsTo(() => BlogName)
+  @BelongsTo(() => BlogName, 'fromBlogNameId')
   declare fromBlogName: BlogName;
   declare getFromBlogName: BelongsToGetAssociationMixin<BlogName>;
 
-  @BelongsTo(() => BlogName)
+  @BelongsTo(() => BlogName, 'rootBlogNameId')
   declare rootBlogName: BlogName;
   declare getRootBlogName: BelongsToGetAssociationMixin<BlogName>;
 
@@ -128,11 +128,13 @@ export class Post
   >;
 
   @BelongsToMany(() => Resource, () => PostResource)
-  declare resources: Resource[];
+  declare resources: Array<Resource & { post_resources: PostResource }>;
+  declare getResources: BelongsToManyGetAssociationsMixin<
+    Resource & { post_resources: PostResource }>;
 
   @BelongsToMany(() => Tag, () => PostTag)
-  declare tags: Tag[];
-  declare getTags: BelongsToManyGetAssociationsMixin<Tag>;
+  declare tags: Array<(Tag & { post_tags: PostTag })>
+  declare getTags: BelongsToManyGetAssociationsMixin<(Tag & { post_tags: PostTag })>;
 
   @BelongsToMany(() => Language, () => PostLanguage)
   declare languages: Language[];

@@ -280,7 +280,7 @@ export default class Importer {
       let tags = post.tags || [];
 
       const data = {
-        tumblr_id: post.id,
+        tumblrId: post.id,
         url: post.post_url,
         type: post.type,
         meta: this.sanitizeImageUrls(clearEmpties(meta)),

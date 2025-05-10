@@ -16,6 +16,7 @@ import { PostContent } from "./post_content.js";
 import { Language } from "./language.js";
 import { ContentLanguage } from "./content_language.js";
 import { Import } from "./import.js";
+import { BelongsToGetAssociationMixin } from "sequelize";
 
 export interface ContentAttributes {
   id?: number;
@@ -54,6 +55,7 @@ export class Content
 
   @BelongsTo(() => BlogName)
   declare blogName: BlogName;
+  declare getBlogName: BelongsToGetAssociationMixin<BlogName>;
 
   @BelongsToMany(
     () => BlogName,

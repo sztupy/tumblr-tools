@@ -10,7 +10,7 @@ import { Post } from "./post.js";
 import { Content } from "./content.js";
 
 export interface PostContentAttributes {
-  position?: number;
+  position: number;
   isLast?: boolean;
   postId: number;
   contentId: number;
@@ -26,8 +26,8 @@ export class PostContent
   extends Model<PostContentAttributes, PostContentAttributes>
   implements PostContentAttributes
 {
-  @Column({ allowNull: true, type: DataType.INTEGER })
-  declare position?: number;
+  @Column({ allowNull: false, type: DataType.INTEGER })
+  declare position: number;
 
   @Column({ allowNull: true, type: DataType.BOOLEAN })
   declare isLast: boolean;

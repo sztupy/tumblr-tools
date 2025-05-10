@@ -174,6 +174,10 @@ npm exec tsx import.ts
 
 This will import the dump into the database, run some analytics on it.
 
+## Export to Wafrn
+
+You can also export your blog into Wafrn. This is in a very-very early and buggy state so you should not do it on a live instance. Check the `export.ts` for an example.
+
 ## Notes
 
 ### Import steps

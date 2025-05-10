@@ -2,6 +2,7 @@ export const environment = {
   loginRootUrl: "http://localhost:3000",
   logSql: false,
   databaseConnectionString: "postgres://postgres:root@localhost:5432/tumblr",
+  wafrnDatabase: "postgres://postgres:root@localhost:5432/wafrn",
   tumblrKeys: [
     {
       consumer_key: 'CONSUMER_KEY',

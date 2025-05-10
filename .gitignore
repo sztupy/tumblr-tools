@@ -8,5 +8,5 @@ dump
 backup*.zip
 
 backup_config.yaml
-environment.ts
+/environment.ts
 import.ts

@@ -21,6 +21,7 @@
   "license": "MIT",
   "config": {},
   "dependencies": {
+    "@datastructures-js/binary-search-tree": "^5.3.2",
     "archiver": "^7.0.1",
     "async": "^3.2.6",
     "axios": "^1.9.0",
