@@ -150,6 +150,20 @@ export async function downloadImagesFromBodyData(config: any, body: any, usernam
               promises.push(downloadImage(config, source, username, post.blog.name));
             }
           }
+
+          for (const el of dom.window.document.getElementsByTagName('source')) {
+            const source = el.getAttribute('src')
+            if (source) {
+              promises.push(downloadImage(config, source, username, poster_user));
+            }
+          }
+
+          for (const el of dom.window.document.getElementsByTagName('video')) {
+            const source = el.getAttribute('poster')
+            if (source) {
+              promises.push(downloadImage(config, source, username, poster_user));
+            }
+          }
         } catch (error) {
           console.log("Could not download image");
           console.log(error);

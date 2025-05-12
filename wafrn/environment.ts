@@ -19,5 +19,5 @@ export const environment = {
       }
     ]
   },
-  logLevel: 'debug'
+  logLevel: 'trace'
 }

@@ -410,7 +410,7 @@ export default class Importer {
         // 2. check if the tags have been changed. If yes we will clear the old tag list, save it as a metadata for archival and then let the system re-create the tags later
         {
           const response = await sequelize.query<Tag & PostTag>(
-            'SELECT position,tag_id as "tagId",name FROM post_tags JOIN tags ON "tagId" = id WHERE post_id = ? ORDER BY position ASC;',
+            'SELECT position,tag_id as "tagId",name FROM post_tags JOIN tags ON post_tags.tag_id = id WHERE post_id = ? ORDER BY position ASC;',
             {
               replacements: [databasePost.id],
               type: Sequelize.QueryTypes.SELECT,
@@ -454,7 +454,7 @@ export default class Importer {
 
         {
           const response = await sequelize.query<PostContent & Content>(
-            'SELECT position,content_id as "contentId",version FROM post_contents JOIN contents ON "contentId" = id WHERE post_id = ? ORDER BY position ASC;',
+            'SELECT position,content_id as "contentId",version FROM post_contents JOIN contents ON post_contents.content_id = id WHERE post_id = ? ORDER BY position ASC;',
             {
               replacements: [databasePost.id],
               type: Sequelize.QueryTypes.SELECT,
@@ -580,7 +580,7 @@ export default class Importer {
         // 7. check linked resources
         {
           const response = await sequelize.query<PostResource & Resource>(
-            'SELECT position,resource_id as "resourceId",url FROM post_resources JOIN resources ON "resourceId" = id WHERE post_id = ? ORDER BY position ASC;',
+            'SELECT position,resource_id as "resourceId",url FROM post_resources JOIN resources ON post_resources.resource_id = id WHERE post_id = ? ORDER BY position ASC;',
             {
               replacements: [databasePost.id],
               type: Sequelize.QueryTypes.SELECT,

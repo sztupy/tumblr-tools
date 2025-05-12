@@ -1,3 +1,4 @@
+/* eslint-disable no-cond-assign */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { QueryTypes } from "sequelize";
 import { BlogName, Post, sequelize } from "../models/index.js";
@@ -51,7 +52,7 @@ export default class WafrnExport {
         const contents = (await post.getContents({ include: ["blogName"] })).sort((a, b) => (a.post_contents.position) - (b.post_contents.position))
 
         let hierarchyLevel = 1;
-        let parentPost = null;
+        let parentPost: WafrnPost | null = null;
 
         const rootBlogName = post.rootBlogName || post.fromBlogName || post.blogName;
         const rootId = post.rootTumblrId || post.fromTumblrId || post.tumblrId;
@@ -98,6 +99,8 @@ export default class WafrnExport {
           content += `<p>${rootContent.text}</p>`;
         }
 
+        let mediaOrder = 0;
+
         const wafrnUser = await this.getWafrnUser(rootBlogName);
 
         const potentialTime = this.getPotentialTime(rootId);
@@ -114,7 +117,7 @@ export default class WafrnExport {
 
         hierarchyLevel++;
 
-        [parentPost,] = await WafrnPost.findOrCreate({
+        [parentPost,] = await WafrnPost.findCreateFind({
           where: {
             remotePostId: wafrnPost.remotePostId
           },
@@ -122,18 +125,22 @@ export default class WafrnExport {
           silent: true
         });
 
-        for (const resource of (await post.getResources())) {
+        const resources = (await post.getResources()).sort((a, b) => (a.post_resources.position || 0) - (b.post_resources.position || 0));
+
+        for (const resource of resources) {
           const media: MediaAttributes = {
-            mediaOrder: resource.post_resources.position,
+            mediaOrder: mediaOrder,
             postId: parentPost.id,
             userId: wafrnUser.id,
             external: true,
-            url: resource.url.replace("t:", "https://64.media.tumblr.com/"),
+            url: resource.url.replace(/^t:/, "https://64.media.tumblr.com/"),
             ipUpload: 'IMAGE_FROM_OTHER_FEDIVERSE_INSTANCE',
             description: resource.meta?.caption || null
           }
 
-          await Media.findOrCreate({
+          mediaOrder++;
+
+          await Media.findCreateFind({
             where: {
               url: media.url
             },
@@ -143,8 +150,6 @@ export default class WafrnExport {
 
         // next we'll generate the rest of the reblog trail
         for (const content of contents) {
-          let mediaOrder = 0;
-
           const blogName = content.blogName || post.blogName;
 
           const wafrnUser = await this.getWafrnUser(blogName);
@@ -152,6 +157,8 @@ export default class WafrnExport {
           const potentialTime = this.getPotentialTime(content.tumblrId);
 
           if (!rootContents.includes(content)) {
+            mediaOrder = 0;
+
             const wafrnPost: WafrnPostAttributes = {
               content: content.text,
               remotePostId: `https://${blogName.name}.tumblr.com/post/${content.tumblrId}`,
@@ -165,7 +172,7 @@ export default class WafrnExport {
 
             hierarchyLevel++;
 
-            [parentPost,] = await WafrnPost.findOrCreate(
+            [parentPost,] = await WafrnPost.findCreateFind(
               {
                 where: {
                   remotePostId: wafrnPost.remotePostId
@@ -176,32 +183,98 @@ export default class WafrnExport {
             );
           }
 
-          const dom = new JSDOM(content.text);
-          for (const el of dom.window.document.getElementsByTagName('img')) {
-            const source = el.getAttribute('src')
+          const generateMedia = async function (source: string | null, el: HTMLElement) {
             if (source) {
-              let alt = el.getAttribute("alt")
-              if (alt == "image") alt = null;
+              let alt: string | null | undefined = el.getAttribute("alt")
+              if (alt == "image") alt = undefined;
+              if (alt === null) alt = undefined;
 
               const media: MediaAttributes = {
                 mediaOrder: mediaOrder,
-                postId: parentPost.id,
+                postId: parentPost?.id,
                 userId: wafrnUser.id,
                 external: true,
-                url: source.replace("t:", "https://64.media.tumblr.com/"),
+                url: source.replace(/^t:/, "https://64.media.tumblr.com/"),
                 ipUpload: 'IMAGE_FROM_OTHER_FEDIVERSE_INSTANCE',
                 description: alt
               }
 
+              if (el.parentElement?.nodeName == "FIGURE" || el.parentElement?.nodeName == "VIDEO") {
+                el = el.parentElement;
+              }
+              el.replaceWith(`![media-${mediaOrder + 1}]`);
+
               mediaOrder++;
 
-              await Media.findOrCreate({
+              await Media.findCreateFind({
                 where: {
                   url: media.url
                 },
                 defaults: media,
               });
+            } else {
+              if (el.parentElement?.nodeName == "FIGURE" || el.parentElement?.nodeName == "VIDEO") {
+                el = el.parentElement;
+              }
+              el.replaceWith('');
             }
+          }
+
+          const oldMedia = mediaOrder;
+          let changed = false;
+
+          const dom = new JSDOM(content.text.replaceAll('<strike>', '<s>').replaceAll('</strike>', '</s>'));
+          let el = null;
+          while (el = dom.window.document.getElementsByTagName('img')[0]) {
+            const source = el.getAttribute('src')
+            await generateMedia(source, el);
+          }
+          while (el = dom.window.document.getElementsByTagName('source')[0]) {
+            const source = el.getAttribute('src')
+            await generateMedia(source, el);
+          }
+          while (el = dom.window.document.getElementsByTagName('video')[0]) {
+            const source = el.getAttribute('poster')
+            await generateMedia(source, el);
+          }
+
+          changed = oldMedia != mediaOrder;
+
+          while (el = dom.window.document.getElementsByTagName('iframe')[0]) {
+            const newElement = dom.window.document.createElement('a');
+            newElement.setAttribute('src', el.parentElement?.getAttribute('data-url') || el.getAttribute('src') || '#');
+            newElement.innerText = el.getAttribute('title') || "Embedded video";
+
+            if (el.parentElement?.nodeName == "FIGURE" || el.parentElement?.nodeName == "VIDEO") {
+              el = el.parentElement;
+            }
+            el.replaceWith(newElement);
+            changed = true;
+          }
+
+          while (el = dom.window.document.querySelector('span.npf_color_monica')) {
+            el.removeAttribute('class');
+            el.setAttribute("style", "color: #ff8a00");
+          }
+          while (el = dom.window.document.querySelector('span.npf_color_ross')) {
+            el.removeAttribute('class');
+            el.setAttribute("style", "color: #00cf34");
+          }
+          while (el = dom.window.document.querySelector('span.npf_color_rachel')) {
+            el.removeAttribute('class');
+            el.setAttribute("style", "color: #00b7ff");
+          }
+          while (el = dom.window.document.querySelector('span.npf_color_niles')) {
+            el.removeAttribute('class');
+            el.setAttribute("style", "color: #ff62cd");
+          }
+          while (el = dom.window.document.querySelector('span.npf_color_chandler')) {
+            el.removeAttribute('class');
+            el.setAttribute("style", "color: #7d5cff");
+          }
+
+          if (changed) {
+            await parentPost.update({ content: dom.window.document.body.innerHTML })
           }
         }
 
